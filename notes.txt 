@@ -1,0 +1,68 @@
+~ Go Packages ~
+
+- https://pkg.go.dev/cloud.google.com/go/spanner
+    - client lib 
+
+
+~ not imported by driver 
+
+database / adminapi 
+- https://pkg.go.dev/cloud.google.com/go/spanner/admin/database/apiv1
+    - auto generated package for cloud spanner database admin API
+    - in googleapis/google-cloud-go repo 
+
+
+database / adminpb 
+- https://pkg.go.dev/google.golang.org/genproto/googleapis/spanner/admin/database/v1
+    - EXPERIMENTAL REPO!!!
+    - genproto / go generated proto packages 
+
+
+
+~ Reference drivers ~
+- https://github.com/golang/go/wiki/SQLDrivers
+
+main references ~ 
+- https://github.com/go-sql-driver/mysql
+    - creates db to destroy 
+    - opens & closes new connection per test 
+
+
+~ promising existing test suits ~   
+
+- https://github.com/bradfitz/go-sql-test
+
+
+~ tutorials ~
+- https://dave.cheney.net/2019/05/07/prefer-table-driven-tests
+- https://www.softwaretestinghelp.com/database-testing-process/
+
+
+Doc links  
+
+- https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language  
+
+- https://cloud.google.com/spanner/docs/transactions
+
+
+
+IAM issue:
+
+adminClient, err := database.NewDatabaseAdminClient(
+		ctx,
+		option.WithoutAuthentication(),
+		option.WithEndpoint("0.0.0.0:9010"),
+		option.WithGRPCDialOption(grpc.WithInsecure()))
+
+
+- https://github.com/googleapis/google-cloud-go/blob/c77c822b5aadb0f5f3ae9381acafdee496047f8a/spanner/admin/database/apiv1/database_admin_client.go#L264
+
+
+Questions
+- Should the tests create and tear down a databese, or be passed an existing database to use?
+- Should the test script open one connecter and run every test on it, or open and close a new connector for every test?
+
+Concerns
+- genproto/ adminpb is experimantal (used in execute ddl)
+
+
