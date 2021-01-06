@@ -22,8 +22,11 @@ Query that gets entire table |
 Type tests 
 Case | Done? 
 --- | --- 
-String | 
-Integer |
+STRING | 
+INT64 |
+BYTES |
+BOOL |
+FLOAT64 |
 
 
 <br>
@@ -34,13 +37,27 @@ Integer |
 Insert tests 
 Case | Done? 
 --- | --- 
-Correct tuple | 
+Correct signle tuple | 
+Correct multiple tuples |
 Insert with wrong types |
 Primary key duplicate | 
 Refferencual integrity violation |
 Insert null into non null type |
 Too many values | 
 Too few values |
+
+
+<br>
+<br>
+
+Delete tests
+Case | Done? 
+--- | --- 
+Correct signle tuple | 
+Correct multiple tuples |
+Referential integrity violation |
+Delete with no tupes |
+Delete all tuples |
 
 
 <br>

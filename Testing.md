@@ -1,6 +1,8 @@
 # Testing setup 
 
-To run tests, a spanner instnace must be up & running.
+To run tests, a spanner instnace must be up & running. The tests also require a test database, they will create and destroy objects in the database. Environment variables are used to point the script to the appropriate database and spanner configuration.
+
+<br>
 
 ## Emulator 
 
