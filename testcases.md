@@ -7,12 +7,12 @@
 
 Standard tests 
 
-Case | Done? 
+Case | Behavior 
 --- | --- 
-Empty Query | 
-Query with syntax error |
-Query that returns nothing |
-Query that returns one tuple |
+Empty Query | Returns 0 rows, err is nil, prints spanner error message to stdout (not stderr)
+Query with syntax error | Returns 0 rows, err is nil, prints spanner error message to stdout (not stderr)
+Query that should return nothing | Returns nothing 
+Query that returns one tuple | Returns expected tuple 
 Query that returns multiple tupes |
 Query that gets entire table |
 
@@ -27,6 +27,8 @@ INT64 |
 BYTES |
 BOOL |
 FLOAT64 |
+" quotes around str |
+' quotes around str |
 
 
 <br>
@@ -70,3 +72,20 @@ Delete all tuples |
 
 
 ## Transaction Tests
+
+
+<br>
+<br>
+
+## Test Tables
+
+<br>
+
+testa
+
+Delete tests
+A | B | C
+--- | --- | ---
+a1 |  b1 | c1
+a2 |  b2 | c2
+a3 |  b3 | c3
