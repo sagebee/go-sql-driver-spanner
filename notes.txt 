@@ -32,6 +32,11 @@ main references ~
 
 - https://github.com/bradfitz/go-sql-test
 
+- https://github.com/googleapis/python-spanner/blob/master/tests/system/test_system.py#L755
+- https://github.com/googleapis/python-spanner/blob/master/tests/_fixtures.py
+
+
+
 
 ~ tutorials ~
 - https://medium.com/google-cloud/cloud-spanner-emulator-bf12d141c12
@@ -45,6 +50,9 @@ main references ~
 - https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language  
 - https://cloud.google.com/spanner/docs/transactions
 
+
+~ misc ~
+- https://gist.github.com/trkrameshkumar/f4f1c00ef5d578561c96  ( get num rows returned)
 
 
 IAM issue:

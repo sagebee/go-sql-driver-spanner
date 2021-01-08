@@ -13,8 +13,9 @@ Empty Query | Returns 0 rows, err is nil, prints spanner error message to stdout
 Query with syntax error | Returns 0 rows, err is nil, prints spanner error message to stdout (not stderr)
 Query that should return nothing | Returns nothing 
 Query that returns one tuple | Returns expected tuple 
-Query that returns multiple tupes |
-Query that gets entire table |
+Query that returns multiple tupes | Returns expected tuples
+Query that gets entire table | Returns expected tuples
+Query subset of tupples | Returns expected tuples
 
 <br>
 <br>

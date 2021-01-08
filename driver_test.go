@@ -151,7 +151,6 @@ func executeDdlApi(curs *Cursor, ddls []string){
 		//return nil, err
 		log.Fatal(err)
 	}
-
 }
 
  
@@ -255,7 +254,10 @@ func TestQueryBasic(t *testing.T){
 	EmptyQuery(t, db, ctx)
 	SyntaxErrorQuery(t, db, ctx)
 	ReturnNothingrQuery(t, db, ctx)
-	ReturnOneTupleQuery(t, db, ctx)
+	OneTupleQuery(t, db, ctx)
+	SubsetQuery(t, db, ctx)
+	WholeTableQuery(t, db, ctx)
+	ColSubseteQuery(t, db, ctx)
 
 	// clear table 
 	executeDdlApi(curs, []string{`DROP TABLE testa`})
@@ -263,7 +265,20 @@ func TestQueryBasic(t *testing.T){
 	// close connection 
 	curs.Close()
 	db.Close()
+}
 
+// helper to check if two arrays of tuples are equal
+func testaTupleListEquals(expected, actual []testaRow)(bool){
+
+	if len(expected) != len(actual){
+		return false
+	}
+	for i, tup := range expected {
+		if tup.A != actual[i].A || tup.B != actual[i].B || tup.C != actual[i].C { 
+			return false
+		}
+	}
+	return true 
 }
 
 // sql unit tests //
@@ -279,10 +294,6 @@ func EmptyQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	numRows := 0
 	for rows.Next(){
 		numRows ++
-		curr := testaRow{A:"", B:"", C:""}
-		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-			t.Error(err.Error())
-		}
 	}
 	rows.Close()
 
@@ -304,10 +315,6 @@ func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	numRows := 0
 	for rows.Next(){
 		numRows ++
-		curr := testaRow{A:"", B:"", C:""}
-		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-			t.Error(err.Error())
-		}
 	}
 	rows.Close()
 
@@ -328,10 +335,6 @@ func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	numRows := 0
 	for rows.Next(){
 		numRows ++
-		curr := testaRow{A:"", B:"", C:""}
-		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-			t.Error(err.Error())
-		}
 	}
 	rows.Close()
 
@@ -341,7 +344,7 @@ func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 }
 
 // statement that should return one tuple
-func ReturnOneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
+func OneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
 	rows, err := db.QueryContext(ctx, "SELECT * FROM testa WHERE A = \"a1\"")
 	if err != nil {
@@ -366,9 +369,95 @@ func ReturnOneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	if curr.A != "a1" || curr.B != "b1" || curr.C != "c1"{
 		t.Errorf("Got wrong tuple")
 	}
-
 }
 
+// should return two tuples
+func SubsetQuery(t *testing.T, db *sql.DB, ctx context.Context){
+
+	var expected []testaRow
+	var actual []testaRow
+	expected = append(expected, testaRow{A:"a1", B:"b1", C:"c1"})
+	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
+
+	rows, err := db.QueryContext(ctx, "SELECT * FROM testa WHERE A = \"a1\" OR A = \"a2\"")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	numRows := 0
+	for rows.Next(){
+		curr := testaRow{A:"", B:"", C:""}
+		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
+			t.Error(err.Error())
+		}
+		actual = append(actual, curr)
+		numRows ++
+	}
+	rows.Close()
+
+	if ! testaTupleListEquals(expected, actual) {
+		t.Errorf("Unexpected tuples returned")
+	}
+}
+
+// should return entire table
+func WholeTableQuery(t *testing.T, db *sql.DB, ctx context.Context){
+
+	var expected []testaRow
+	var actual []testaRow
+	expected = append(expected, testaRow{A:"a1", B:"b1", C:"c1"})
+	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
+	expected = append(expected, testaRow{A:"a3", B:"b3", C:"c3"})
+
+	rows, err := db.QueryContext(ctx, "SELECT * FROM testa ORDER BY A")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	numRows := 0
+
+	for rows.Next(){
+		curr := testaRow{A:"", B:"", C:""}
+		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
+			t.Error(err.Error())
+		}
+		actual = append(actual, curr)
+		numRows ++
+	}
+	rows.Close()
+
+	if ! testaTupleListEquals(expected, actual) {
+		t.Errorf("Unexpected tuples returned")
+	}
+}
+
+// Should return subset of columns
+func ColSubseteQuery(t *testing.T, db *sql.DB, ctx context.Context){
+
+	var expected []testaRow
+	var actual []testaRow
+	expected = append(expected, testaRow{A:"a1", B:"b1", C:""})
+
+	rows, err := db.QueryContext(ctx, "SELECT A,B FROM testa WHERE A = \"a1\" ORDER BY A")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	numRows := 0
+	for rows.Next(){
+		curr := testaRow{A:"", B:"", C:""}
+		if err := rows.Scan(&curr.A, &curr.B); err != nil {
+			t.Error(err.Error())
+		}
+		actual = append(actual, curr)
+		numRows ++
+	}
+	rows.Close()
+
+	if ! testaTupleListEquals(expected, actual) {
+		t.Errorf("Unexpected tuples returned")
+	}
+}
 
 
 
@@ -377,46 +466,7 @@ func ReturnOneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
 func TestQueryTypes( t *testing.T){
 
-	/*
 
-	fmt.Println("Test bascs old")
-
-	// open db
-	ctx := context.Background()
-	db, err := sql.Open("spanner", dsn)
-	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
-	}
-
-	rows, err := db.QueryContext(ctx, "SELECT * FROM testa ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var (
-		a string
-		b string
-		c string
-	)
-	for rows.Next() {
-
-		if err := rows.Scan(&a, &b, &c); err != nil {
-			log.Fatal(err)
-		}
-
-		t.Errorf("%s %s %s\n", a, b, c)
-		//if err := rows.Scan(&val); err != nil {
-		//	log.Fatal(err)
-		//}
-		fmt.Printf("SSS %s %s %s SSS\n", a, b, c)
-
-		//if val != 1{
-		//	t.Error(val)
-		//}
-	}
-	rows.Close()
-
-	*/
 
 }
 
