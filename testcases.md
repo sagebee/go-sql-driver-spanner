@@ -33,12 +33,21 @@ NaN |
 -inf |
 " quotes around str |
 ' quotes around str |
-String overflow |
-Int overflow |
-Read int into string | 
-Read string into int |
-Read float into int |
-Read int into float |
+
+<br>
+<br>
+
+Overflow tests
+Case | Behavior 
+--- | --- 
+Read too large string | 
+Write too large string |
+Read too large bytes | 
+Write too large bytes |
+Read too large int |
+Write too large int |
+Read too large float |
+Write too large float |
 
 <br>
 <br>
