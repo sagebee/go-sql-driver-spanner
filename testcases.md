@@ -5,8 +5,9 @@
 
 ## SQL Tests
 
-Standard tests 
+<br>
 
+Standard tests 
 Case | Behavior 
 --- | --- 
 Empty Query | Returns 0 rows, err is nil, prints spanner error message to stdout (not stderr)
@@ -16,11 +17,15 @@ Query that returns one tuple | Returns expected tuple
 Query that returns multiple tupes | Returns expected tuples
 Query that gets entire table | Returns expected tuples
 Query subset of tupples | Returns expected tuples
+Query non existant table | 
+Query row function | 
+Scan into nil pointer (db/sql)|
+Cancel context while scanning rows (db/sql) | 
 
 <br>
 <br>
 
-Type tests 
+General Type tests 
 Case | Behavior 
 --- | --- 
 STRING | 
@@ -37,17 +42,38 @@ NaN |
 <br>
 <br>
 
-Overflow tests
+Overflow Read tests
 Case | Behavior 
 --- | --- 
 Read too large string | 
-Write too large string |
 Read too large bytes | 
-Write too large bytes |
 Read too large int |
-Write too large int |
 Read too large float |
-Write too large float |
+
+
+<br>
+<br>
+
+Null read tests
+Case | Behavior 
+--- | --- 
+Read NULL into string | 
+Read NULL into int |
+Read NULL into float |
+Read NULL into byte | 
+
+<br>
+<br>
+
+Bad Conversion Read tests
+Case | Behavior 
+--- | --- 
+Read string into int |
+Read int into string |
+Read int into float |
+Read float into int |
+Read bool into string |
+Read int into bool |
 
 <br>
 <br>
@@ -60,17 +86,12 @@ Returns tuples from first table |
 Returns tuples from second table |
 Returns tuples from both tables | 
 
-
 <br>
-<br>
-
-views?
-
-
-<br>
-<br>
+<br>    
 
 ## DML Tests
+
+<br>
 
 Insert tests 
 Case | Behavior
@@ -79,16 +100,28 @@ Correct signle tuple |
 Correct multiple tuples |
 Insert with wrong types |
 Primary key duplicate | 
-Refferencual integrity violation |
+Refferentual integrity violation cascade |
+Refferential integrity violation no cascade |
 Insert null into non null type |
 Too many values | 
 Too few values |
 
+<br>
+<br>
+
+Overflow Write tests
+Case | Behavior 
+--- | --- 
+Write too large string |
+Write too large bytes |
+Write too large int |
+Write too large float |
 
 <br>
 <br>
 
 Delete tests
+
 Case | Behavior
 --- | --- 
 Correct signle tuple | 
@@ -103,12 +136,47 @@ Delete all tuples |
 
 ## DDL Tests 
 
+Create tests 
+Case | Behavior
+--- | --- 
+Create table with all types | 
+Create table syntax error |
+Create table that violates naming | 
+Create table with no primary key | 
 
-
-
+<br>
+<br>
 
 ## Transaction Tests
 
+General 
+Case | Behavior
+--- | --- 
+Prepare | 
+Stmt | 
+Use Stmt after close | 
+Run query tests in transaction | 
+Row implicit close (go/sql) | 
+Commit after rollback | 
+Query context after timeout |
+
+<br>
+<br>
+
+## Miscelanious Tests
+
+Case | Behavior
+--- | --- 
+Run unsupported options (should err) (db/sql) | 
+CRUD (mysql) | 
+
+<br>
+<br>
+
+<br>
+<br>
+
+todo? views, driver panic, concurrency, connection pool things, deadlock, timestamp/date
 
 <br>
 <br>
