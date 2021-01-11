@@ -136,6 +136,8 @@ Delete all tuples |
 
 ## DDL Tests 
 
+<br>
+
 Create tests 
 Case | Behavior
 --- | --- 
@@ -147,7 +149,53 @@ Create table with no primary key |
 <br>
 <br>
 
+Drop tests 
+Case | Behavior
+--- | --- 
+Drop table ok | 
+Drop nonexistant table |
+Drop table refferencial integrity violation no cascade |
+Drop table refferencial integrity violation cascade |
+
+<br>
+<br>
+
+Rename tests 
+Case | Behavior
+--- | --- 
+Rename tablle ok |
+Rename table to existing table |
+Rename table to violate naming convention | 
+Rename column ok | 
+Rename column to existing column name |
+Rename column to violate naming rules | 
+
+<br>
+<br>
+
+Change tests
+Case | Behavior
+--- | --- 
+Change string to int empty table |
+Change string to int with data |
+Other combinations | 
+
+<br>
+<br>
+
+Truncate tests 
+Case | Behavior
+--- | --- 
+Truncate table ok |
+Truncate refferencial integrity violation no cascade |
+Truncate refferencial integrity violation cascade |
+
+<br>
+<br>
+
 ## Transaction Tests
+
+<br>
 
 General 
 Case | Behavior
@@ -159,6 +207,17 @@ Run query tests in transaction |
 Row implicit close (go/sql) | 
 Commit after rollback | 
 Query context after timeout |
+
+<br>
+<br> 
+
+Rollback tests 
+Case | Behavior
+--- | ---  
+Truncate with rollback | 
+Delete with rollback |
+Insert with rollback |
+CRUD with rollback | 
 
 <br>
 <br>
