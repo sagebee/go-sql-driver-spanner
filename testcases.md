@@ -28,8 +28,34 @@ INT64 |
 BYTES |
 BOOL |
 FLOAT64 |
+NaN |
++inf |
+-inf |
 " quotes around str |
 ' quotes around str |
+String overflow |
+Int overflow |
+Read int into string | 
+Read string into int |
+Read float into int |
+Read int into float |
+
+<br>
+<br>
+
+Inner Join tests
+Case | Done? 
+--- | --- 
+Returns nothing | 
+Returns tuples from first table |
+Returns tuples from second table |
+Returns tuples from both tables | 
+
+
+<br>
+<br>
+
+views?
 
 
 <br>
@@ -82,11 +108,17 @@ Delete all tuples |
 
 <br>
 
-testa
+Testa
 
-Delete tests
 A | B | C
 --- | --- | ---
 a1 |  b1 | c1
 a2 |  b2 | c2
 a3 |  b3 | c3
+
+<br>
+
+TypeTesta
+
+stringt | bytest | intt | floatt | boolt
+--- | --- | --- | --- | ---
