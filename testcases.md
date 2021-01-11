@@ -21,7 +21,7 @@ Query subset of tupples | Returns expected tuples
 <br>
 
 Type tests 
-Case | Done? 
+Case | Behavior 
 --- | --- 
 STRING | 
 INT64 |
@@ -44,7 +44,7 @@ Read int into float |
 <br>
 
 Inner Join tests
-Case | Done? 
+Case | Behavior 
 --- | --- 
 Returns nothing | 
 Returns tuples from first table |
@@ -64,7 +64,7 @@ views?
 ## DML Tests
 
 Insert tests 
-Case | Done? 
+Case | Behavior
 --- | --- 
 Correct signle tuple | 
 Correct multiple tuples |
@@ -80,7 +80,7 @@ Too few values |
 <br>
 
 Delete tests
-Case | Done? 
+Case | Behavior
 --- | --- 
 Correct signle tuple | 
 Correct multiple tuples |
