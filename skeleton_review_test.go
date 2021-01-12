@@ -1,8 +1,5 @@
 package spannerdriver
 
-// todo 
-// - configure to work with remote proj as well
-
 import (
 	"testing"
 	"os"
@@ -85,14 +82,6 @@ type typeTestaRow struct {
 }
 
 
-// setup //
-
-//const userAgent = "go-sql-driver-spanner/0.1"
-//var _ driver.DriverContext = &Driver{}
-
-
-//var _ driver.DriverContext = &Driver{}
-
 func init(){
 
 	//sql.Register("spanner", &Driver{})
@@ -119,20 +108,13 @@ func init(){
 // ******************* //
 
 // Executes DDL statements 
-// (CREATE, DROP, ALTER, TRUNCATE, RENAME, etc)
-// Using 
 // !!! adminpb/ genproto is an experimenal repo
 // duct tape
 func executeDdlApi(curs *Connector, ddls []string){}
 
  
 // duct tape
-func ExecuteDMLClientLib(dml []string){
-
-
-}
-
-
+func ExecuteDMLClientLib(dml []string){}
 
 // end client lib funs 
 // ******************* //
@@ -152,22 +134,15 @@ func mustExec(t * testing.T, db *sql.DB, query string){
 //  #### tests ####  // 
 
 // Tests general query functionality 
-func TestQueryBasic(t *testing.T){
-
-}
-
+func TestQueryBasic(t *testing.T){}
 
 // sql unit tests //
 
 // send empty string as query 
-func EmptyQuery(t *testing.T, db *sql.DB, ctx context.Context){
-
-}
+func EmptyQuery(t *testing.T, db *sql.DB, ctx context.Context){}
 
 // seend query with sql syntax error 
-func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){
-
-}
+func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){}
 
 
 // query that should return nothing 
