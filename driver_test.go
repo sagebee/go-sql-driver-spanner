@@ -23,9 +23,9 @@ import (
 	"context"
 	"log"
 	"database/sql"
-	//"database/sql/driver"
 	"runtime/debug"
 	"fmt"
+	"reflect"
 
 	"cloud.google.com/go/spanner"
 
@@ -47,14 +47,14 @@ var(
 )
 
 
-// cursor things to connect to database 
-type Cursor struct {
+// connector things 
+type Connector struct {
 	ctx         context.Context	
 	client      *spanner.Client
 	adminClient *adminapi.DatabaseAdminClient
 }
 
-func NewCursor()(*Cursor, error){
+func NewConnector()(*Connector, error){
 
 	ctx := context.Background()
 
@@ -72,7 +72,7 @@ func NewCursor()(*Cursor, error){
 			return nil,err
 	}
 
-	curs := &Cursor{
+	curs := &Connector{
 		ctx: ctx,
 		client: dataClient,
 		adminClient: adminClient,
@@ -81,18 +81,23 @@ func NewCursor()(*Cursor, error){
 	return curs,nil
 }
 
-func (c *Cursor) Close() {
+func (c *Connector) Close() {
 	c.client.Close()
 	c.adminClient.Close()
 }
 
-// structures to hold row infomatiom 
+// structures for row data 
 type testaRow struct{
 	A string
 	B string
 	C string
 }
-
+type typeTestaRow struct {
+	stringt string 
+	intt int 
+	floatt float64
+	boolt bool
+}
 
 
 // setup //
@@ -135,7 +140,7 @@ func init(){
 // Using 
 // !!! adminpb is an experimenal repo
 // duct tape
-func executeDdlApi(curs *Cursor, ddls []string){
+func executeDdlApi(curs *Connector, ddls []string){
 
 	os.Setenv("SPANNER_EMULATOR_HOST","0.0.0.0:9010")
 
@@ -228,21 +233,21 @@ func mustExec(t * testing.T, db *sql.DB, query string){
 func TestQueryBasic(t *testing.T){
 
 	// set up test table
-	curs, err := NewCursor()
+	curs, err := NewConnector()
 	if err != nil{
 		log.Fatal(err)
 	}
 
-	executeDdlApi(curs, []string{`CREATE TABLE testa (
+	executeDdlApi(curs, []string{`CREATE TABLE Testa (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`}) // duct tape 
 
-	ExecuteDMLClientLib([]string{`INSERT INTO testa (A, B, C) 
+	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `}) // duct tape 
 
-	// open database 
+	// open db 
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
@@ -260,7 +265,7 @@ func TestQueryBasic(t *testing.T){
 	ColSubseteQuery(t, db, ctx)
 
 	// clear table 
-	executeDdlApi(curs, []string{`DROP TABLE testa`})
+	executeDdlApi(curs, []string{`DROP TABLE Testa`})
 
 	// close connection 
 	curs.Close()
@@ -306,7 +311,7 @@ func EmptyQuery(t *testing.T, db *sql.DB, ctx context.Context){
 // seend query with sql syntax error 
 func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
-	rows, err := db.QueryContext(ctx, "SELECT SELECT * FROM testa")
+	rows, err := db.QueryContext(ctx, "SELECT SELECT * FROM Testa")
 
 	if err != nil {
 		t.Errorf(err.Error()) // doesn't err, just prints to stdout
@@ -327,7 +332,7 @@ func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){
 // send empty string as query 
 func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
-	rows, err := db.QueryContext(ctx, "SELECT * FROM testa WHERE A = \"a60170ae6d93af54ee67b953f7baa767f439dc0c\"")
+	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a60170ae6d93af54ee67b953f7baa767f439dc0c\"")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -345,8 +350,7 @@ func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
 // statement that should return one tuple
 func OneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
-
-	rows, err := db.QueryContext(ctx, "SELECT * FROM testa WHERE A = \"a1\"")
+	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a1\"")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -379,7 +383,7 @@ func SubsetQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	expected = append(expected, testaRow{A:"a1", B:"b1", C:"c1"})
 	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
 
-	rows, err := db.QueryContext(ctx, "SELECT * FROM testa WHERE A = \"a1\" OR A = \"a2\"")
+	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a1\" OR A = \"a2\"")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -409,7 +413,7 @@ func WholeTableQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
 	expected = append(expected, testaRow{A:"a3", B:"b3", C:"c3"})
 
-	rows, err := db.QueryContext(ctx, "SELECT * FROM testa ORDER BY A")
+	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa ORDER BY A")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -438,7 +442,7 @@ func ColSubseteQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	var actual []testaRow
 	expected = append(expected, testaRow{A:"a1", B:"b1", C:""})
 
-	rows, err := db.QueryContext(ctx, "SELECT A,B FROM testa WHERE A = \"a1\" ORDER BY A")
+	rows, err := db.QueryContext(ctx, "SELECT A,B FROM Testa WHERE A = \"a1\" ORDER BY A")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
@@ -460,16 +464,76 @@ func ColSubseteQuery(t *testing.T, db *sql.DB, ctx context.Context){
 }
 
 
-
-
-
-
+// tests spanner types 
 func TestQueryTypes( t *testing.T){
 
-
-
+		// set up test table
+		curs, err := NewConnector()
+		if err != nil{
+			log.Fatal(err)
+		}
+	
+		executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
+			stringt	STRING(1024),
+			intt  INT64,
+			floatt   FLOAT64,
+			boolt BOOL
+		)	 PRIMARY KEY (stringt)`}) // duct tape 
+	
+		ExecuteDMLClientLib([]string{`INSERT INTO TypeTesta (stringt, intt, floatt, boolt) 
+			VALUES ("aa", 42, 42, TRUE), ("bb", -42, -42, FALSE), 
+			("cc", -1, 42, FALSE)`}) // duct tape 
+	
+		// open db
+		ctx := context.Background()
+		db, err := sql.Open("spanner", dsn)
+		if err != nil {
+			debug.PrintStack()
+			log.Fatal(err)
+		}
+	
+		// run unit tests 
+		AtomicTypeQuery(t, db, ctx)
+	
+		// drop table 
+		executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
+	
+		// close  
+		curs.Close()
+		db.Close()
 }
 
+// check that atomic types read in as expected 
+func AtomicTypeQuery(t *testing.T, db *sql.DB, ctx context.Context){
+
+	// general type tests
+	want1 := []typeTestaRow{
+		{stringt: "aa", intt:42, floatt:42, boolt:true},
+		{stringt: "bb", intt:-42, floatt:-42, boolt:false},
+	}
+
+	rows, err := db.QueryContext(ctx, 
+		"SELECT * FROM TypeTesta WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	got1 := []typeTestaRow{}
+	numRows := 0
+	for rows.Next(){
+		curr := typeTestaRow{stringt:"", intt:-1, floatt:-1, boolt:false}
+		if err := rows.Scan(&curr.stringt, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
+			t.Error(err.Error())
+		}
+		got1 = append(got1,curr)
+		numRows ++
+	}
+	rows.Close()
+
+	if !reflect.DeepEqual(want1,got1){
+		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got1, want1)	
+	}
+}
 
 
 // error: spanner: code = "InvalidArgument", desc = "Statement not supported: CreateTableStatement [at 1:1]

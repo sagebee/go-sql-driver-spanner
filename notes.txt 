@@ -42,6 +42,7 @@ main references ~
 - https://medium.com/google-cloud/cloud-spanner-emulator-bf12d141c12
 - https://dave.cheney.net/2019/05/07/prefer-table-driven-tests
 - https://www.softwaretestinghelp.com/database-testing-process/
+- https://yourbasic.org/golang/fmt-printf-reference-cheat-sheet/#boolean
 
 
 
@@ -49,6 +50,8 @@ main references ~
 - https://golang.org/pkg/database/sql/
 - https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language  
 - https://cloud.google.com/spanner/docs/transactions
+- https://cloud.google.com/spanner/docs/functions-and-operators
+- https://blog.golang.org/strings
 
 
 ~ misc ~

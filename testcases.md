@@ -28,11 +28,13 @@ Cancel context while scanning rows (db/sql) |
 General Type tests 
 Case | Behavior 
 --- | --- 
-STRING | 
-INT64 |
-BYTES |
-BOOL |
-FLOAT64 |
+STRING | reads string into strink ok
+INT64 | reads into int ok 
+negative INF64 | reads into int ok 
+BYTES | **won't return any rows if bytes type is there**
+BOOL | reads into bool ok
+FLOAT64 | reads into float ok
+negative FLOAT64 | reads into float ok
 NaN |
 +inf |
 -inf |
@@ -235,7 +237,7 @@ CRUD (mysql) |
 <br>
 <br>
 
-todo? views, driver panic, concurrency, connection pool things, deadlock, timestamp/date
+todo? regex/ pattern matching, views, driver panic, concurrency, connection pool things, deadlock, timestamp/date
 
 <br>
 <br>
