@@ -26,7 +26,6 @@ import (
 	"runtime/debug"
 	"fmt"
 	"reflect"
-
 	"cloud.google.com/go/spanner"
 
 	// api/lib packages not imported by driver
@@ -99,18 +98,7 @@ type typeTestaRow struct {
 	boolt bool
 }
 
-
-// setup //
-
-//const userAgent = "go-sql-driver-spanner/0.1"
-//var _ driver.DriverContext = &Driver{}
-
-
-//var _ driver.DriverContext = &Driver{}
-
 func init(){
-
-	//sql.Register("spanner", &Driver{})
 
 	// get environment variables
 	instance = os.Getenv("SPANNER_TEST_INSTANCE")
@@ -124,8 +112,6 @@ func init(){
 
 	// derive data source name 
 	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
-
-	// maybe: create test database
 
 }
 
@@ -193,14 +179,11 @@ func ExecuteDMLClientLib(dml []string){
 
 }
 
-
-
 // end client lib funs 
 // ******************* //
 
 
 // helper funs for tests //
-
 func mustExecContext(t * testing.T, ctx context.Context, db *sql.DB, query string){
 	_,err := db.ExecContext(ctx, query)
 	if err != nil {
@@ -217,15 +200,6 @@ func mustQueryContext( t *testing.T, ctx context.Context, db *sql.DB, query stri
 
 	return rows
 }
-
-func mustExec(t * testing.T, db *sql.DB, query string){
-	_,err := db.Exec(query)
-	if err != nil {
-		debug.PrintStack()
-		t.Fatalf(err.Error())
-	}
-}
-
 
 //  #### tests ####  // 
 
@@ -329,7 +303,7 @@ func SyntaxErrorQuery(t *testing.T, db *sql.DB, ctx context.Context){
 }
 
 
-// send empty string as query 
+// query that shold return nothing
 func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
 	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a60170ae6d93af54ee67b953f7baa767f439dc0c\"")
@@ -348,7 +322,7 @@ func ReturnNothingrQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	}
 }
 
-// statement that should return one tuple
+// query that should return one tuple
 func OneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a1\"")
 	if err != nil {
@@ -503,6 +477,8 @@ func TestQueryTypes( t *testing.T){
 		db.Close()
 }
 
+// type unit tests
+
 // check that atomic types read in as expected 
 func AtomicTypeQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
@@ -533,6 +509,10 @@ func AtomicTypeQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	if !reflect.DeepEqual(want1,got1){
 		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got1, want1)	
 	}
+
+	// NaN, +Inf, -Inf
+
+
 }
 
 

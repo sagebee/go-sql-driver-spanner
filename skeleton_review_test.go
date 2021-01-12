@@ -84,8 +84,6 @@ type typeTestaRow struct {
 
 func init(){
 
-	//sql.Register("spanner", &Driver{})
-
 	// get environment variables
 	instance = os.Getenv("SPANNER_TEST_INSTANCE")
 	project = os.Getenv("SPANNER_TEST_PROJECT")
@@ -126,10 +124,6 @@ func mustExecContext(t * testing.T, ctx context.Context, db *sql.DB, query strin
 
 func mustQueryContext( t *testing.T, ctx context.Context, db *sql.DB, query string) (rows *sql.Rows){return nil}
 
-func mustExec(t * testing.T, db *sql.DB, query string){
-
-}
-
 
 //  #### tests ####  // 
 
@@ -166,6 +160,8 @@ func ColSubseteQuery(t *testing.T, db *sql.DB, ctx context.Context){}
 
 // tests atomic spanner types 
 func TestQueryAtomicTypes( t *testing.T){}
+
+// type unit tests // 
 
 // check that atomic types read in as expected 
 func GeneralAtomicTypeQuery(t *testing.T, db *sql.DB, ctx context.Context){}
