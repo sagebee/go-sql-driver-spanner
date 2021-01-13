@@ -42,7 +42,6 @@ var(
 	dsn string
 )
 
-
 // connector things 
 type Connector struct {
 	ctx         context.Context	
@@ -118,7 +117,6 @@ func init(){
 // ******************* //
 
 // Executes DDL statements 
-// (CREATE, DROP, ALTER, TRUNCATE, RENAME, etc)
 // Using 
 func executeDdlApi(curs *Connector, ddls []string){
 

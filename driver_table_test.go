@@ -22,7 +22,7 @@ import (
 	"database/sql"
 	"runtime/debug"
 	"fmt"
-	//"reflect"
+	"reflect"
 	"cloud.google.com/go/spanner"
 
 	// api/lib packages not imported by driver
@@ -115,7 +115,6 @@ func init(){
 // ******************* //
 
 // Executes DDL statements 
-// (CREATE, DROP, ALTER, TRUNCATE, RENAME, etc)
 func executeDdlApi(curs *Connector, ddls []string){
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
@@ -208,26 +207,34 @@ func TestQueryGeneral(t *testing.T){
         want  []testaRow
     }
 
-	/*
+	// test cases
 	tests := []test{
 		{input: "SELECT * FROM Testa WHERE A = \"a1\"", 
 		want: []testaRow{
 			{A:"a1", B:"b1", C:"c1"},
 		}},
-	}
-	*/
 
-	fmt.Println(RunQueryGeneral(t, "SELECT * FROM Testa WHERE A = \"a1\""));
+		{input: "SELECT * FROM Testa ORDER BY A", 
+		want: []testaRow{
+			{A:"a1", B:"b1", C:"c1"},
+			{A:"a2", B:"b2", C:"c2"},
+			{A:"a3", B:"b3", C:"c3"},
+		}},
+	}
+
+	// run tests
+	for _, tc := range tests {
+		got := RunQueryGeneral(t, tc.input)
+        if !reflect.DeepEqual(tc.want, got) {
+            t.Errorf("expected: %v, got: %v", tc.want, got)
+		}
+	}
 
 	// clear table 
 	executeDdlApi(curs, []string{`DROP TABLE Testa`});
 
 	// close connection 
 	curs.Close()
-
-
-t.Errorf("XXXX")
-	
 }
 
 
@@ -242,7 +249,6 @@ func RunQueryGeneral(t *testing.T, query string,)([]testaRow){
 	}
 
 	rows := mustQueryContext(t, ctx, db, query)
-
 	got := []testaRow{}
 	numRows := 0
 	for rows.Next(){
