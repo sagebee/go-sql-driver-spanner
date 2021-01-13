@@ -70,13 +70,9 @@ adminClient, err := database.NewDatabaseAdminClient(
 - https://github.com/googleapis/google-cloud-go/blob/c77c822b5aadb0f5f3ae9381acafdee496047f8a/spanner/admin/database/apiv1/database_admin_client.go#L264
 
 
-Questions
-- Should the tests create and tear down a databese, or be passed an existing database to use?
-- Should the test script open one connecter and run every test on it, or open and close a new connector for every test?
-
-Concerns
-- genproto/ adminpb is experimantal (used in execute ddl)
-
+PR/ commit guides
+- https://www.conventionalcommits.org/en/v1.0.0/
+- https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines
 
 package main
 

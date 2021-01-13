@@ -14,9 +14,6 @@
 
 package spannerdriver
 
-// todo 
-// - configure to work with remote proj as well
-
 import (
 	"testing"
 	"os"
@@ -123,8 +120,6 @@ func init(){
 // Executes DDL statements 
 // (CREATE, DROP, ALTER, TRUNCATE, RENAME, etc)
 // Using 
-// !!! adminpb is an experimenal repo
-// duct tape
 func executeDdlApi(curs *Connector, ddls []string){
 
 	os.Setenv("SPANNER_EMULATOR_HOST","0.0.0.0:9010")
@@ -143,12 +138,8 @@ func executeDdlApi(curs *Connector, ddls []string){
 	}
 }
 
- 
-// duct tape
 // executes DML using the client library 
 func ExecuteDMLClientLib(dml []string){
-
-	os.Setenv("SPANNER_EMULATOR_HOST","0.0.0.0:9010")
 
 	// open client
 	var db = "projects/"+project+"/instances/"+instance+"/databases/"+dbname;
@@ -244,20 +235,6 @@ func TestQueryBasic(t *testing.T){
 	// close connection 
 	curs.Close()
 	db.Close()
-}
-
-// helper to check if two arrays of tuples are equal
-func testaTupleListEquals(expected, actual []testaRow)(bool){
-
-	if len(expected) != len(actual){
-		return false
-	}
-	for i, tup := range expected {
-		if tup.A != actual[i].A || tup.B != actual[i].B || tup.C != actual[i].C { 
-			return false
-		}
-	}
-	return true 
 }
 
 // sql unit tests //
