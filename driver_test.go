@@ -112,7 +112,6 @@ func init(){
 
 	// derive data source name 
 	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
-
 }
 
 
@@ -146,6 +145,7 @@ func executeDdlApi(curs *Connector, ddls []string){
 
  
 // duct tape
+// executes DML using the client library 
 func ExecuteDMLClientLib(dml []string){
 
 	os.Setenv("SPANNER_EMULATOR_HOST","0.0.0.0:9010")
@@ -279,7 +279,6 @@ func EmptyQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	if numRows != 0 {
 		t.Errorf("Shouldn't return any rows")
 	}
-
 }
 
 // seend query with sql syntax error 
@@ -352,88 +351,90 @@ func OneTupleQuery(t *testing.T, db *sql.DB, ctx context.Context){
 // should return two tuples
 func SubsetQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
-	var expected []testaRow
-	var actual []testaRow
-	expected = append(expected, testaRow{A:"a1", B:"b1", C:"c1"})
-	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
-
+	want := []testaRow{
+		{A:"a1", B:"b1", C:"c1"},
+		{A:"a2", B:"b2", C:"c2"},
+	}
+	
 	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa WHERE A = \"a1\" OR A = \"a2\"")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
+	got := []testaRow{}
 	numRows := 0
 	for rows.Next(){
 		curr := testaRow{A:"", B:"", C:""}
 		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
 			t.Error(err.Error())
 		}
-		actual = append(actual, curr)
+		got = append(got, curr)
 		numRows ++
 	}
 	rows.Close()
 
-	if ! testaTupleListEquals(expected, actual) {
-		t.Errorf("Unexpected tuples returned")
+	if ! reflect.DeepEqual(want,got) {
+		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got, want)
 	}
 }
 
 // should return entire table
 func WholeTableQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
-	var expected []testaRow
-	var actual []testaRow
-	expected = append(expected, testaRow{A:"a1", B:"b1", C:"c1"})
-	expected = append(expected, testaRow{A:"a2", B:"b2", C:"c2"})
-	expected = append(expected, testaRow{A:"a3", B:"b3", C:"c3"})
+	want := []testaRow{
+		{A:"a1", B:"b1", C:"c1"},
+		{A:"a2", B:"b2", C:"c2"},
+		{A:"a3", B:"b3", C:"c3"},
+	}
 
 	rows, err := db.QueryContext(ctx, "SELECT * FROM Testa ORDER BY A")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
+	got := []testaRow{}
 	numRows := 0
-
 	for rows.Next(){
 		curr := testaRow{A:"", B:"", C:""}
 		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
 			t.Error(err.Error())
 		}
-		actual = append(actual, curr)
+		got = append(got, curr)
 		numRows ++
 	}
 	rows.Close()
 
-	if ! testaTupleListEquals(expected, actual) {
-		t.Errorf("Unexpected tuples returned")
+	if ! reflect.DeepEqual(want,got) {
+		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got, want)
 	}
 }
 
 // Should return subset of columns
 func ColSubseteQuery(t *testing.T, db *sql.DB, ctx context.Context){
 
-	var expected []testaRow
-	var actual []testaRow
-	expected = append(expected, testaRow{A:"a1", B:"b1", C:""})
+	want := []testaRow{
+		{A:"a1", B:"b1", C:""},
+	}
 
 	rows, err := db.QueryContext(ctx, "SELECT A,B FROM Testa WHERE A = \"a1\" ORDER BY A")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
+	got := []testaRow{}
 	numRows := 0
 	for rows.Next(){
 		curr := testaRow{A:"", B:"", C:""}
 		if err := rows.Scan(&curr.A, &curr.B); err != nil {
 			t.Error(err.Error())
 		}
-		actual = append(actual, curr)
+		got = append(got, curr)
 		numRows ++
 	}
 	rows.Close()
 
-	if ! testaTupleListEquals(expected, actual) {
-		t.Errorf("Unexpected tuples returned")
+	if ! reflect.DeepEqual(want,got) {
+		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got, want)
 	}
 }
 
@@ -509,10 +510,6 @@ func AtomicTypeQuery(t *testing.T, db *sql.DB, ctx context.Context){
 	if !reflect.DeepEqual(want1,got1){
 		t.Errorf("Unexpected tuples returned \n got1: %#v\nwant: %#v", got1, want1)	
 	}
-
-	// NaN, +Inf, -Inf
-
-
 }
 
 
