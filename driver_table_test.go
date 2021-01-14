@@ -81,7 +81,7 @@ func (c *Connector) Close() {
 	c.adminClient.Close()
 }
 
-// structures for row data 
+// structs for row data 
 type testaRow struct{
 	A string
 	B string
@@ -89,6 +89,7 @@ type testaRow struct{
 }
 type typeTestaRow struct {
 	stringt string 
+	bytest []byte
 	intt int 
 	floatt float64
 	boolt bool
@@ -201,25 +202,46 @@ func TestQueryGeneral(t *testing.T){
 	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `}) 
 
-	// run table driven tests 
+
+	// cases
 	type test struct {
         input string
         want  []testaRow
     }
 
-	// test cases
 	tests := []test{
+		// empty query 
+		{input: "", want: []testaRow{}},
+		// syntax error 
+		{input: "SELECT SELECT * FROM Testa", want: []testaRow{}},
+		// retur nothing 
+		{input: "SELECT SELECT * FROM Testa", want: []testaRow{}},
+		// return one tuple
 		{input: "SELECT * FROM Testa WHERE A = \"a1\"", 
 		want: []testaRow{
 			{A:"a1", B:"b1", C:"c1"},
 		}},
-
+		// return subset of tuples 
+		{input: "SELECT * FROM Testa WHERE A = \"a1\" OR A = \"a2\"", 
+		want: []testaRow{
+			{A:"a1", B:"b1", C:"c1"},
+			{A:"a2", B:"b2", C:"c2"},
+		}},
+		// subet of tuples with != 
+		{input: "SELECT * FROM Testa WHERE A != \"a3\"", 
+		want: []testaRow{
+			{A:"a1", B:"b1", C:"c1"},
+			{A:"a2", B:"b2", C:"c2"},
+		}},
+		// return entire table 
 		{input: "SELECT * FROM Testa ORDER BY A", 
 		want: []testaRow{
 			{A:"a1", B:"b1", C:"c1"},
 			{A:"a2", B:"b2", C:"c2"},
 			{A:"a3", B:"b3", C:"c3"},
 		}},
+		// query non existant table
+		{input: "SELECT * FROM Testaa", want: []testaRow{}},
 	}
 
 	// run tests
@@ -230,17 +252,18 @@ func TestQueryGeneral(t *testing.T){
 		}
 	}
 
-	// clear table 
+	// TODO attribute subset, won'w work with existing fun 
+
+	// drop table 
 	executeDdlApi(curs, []string{`DROP TABLE Testa`});
 
 	// close connection 
 	curs.Close()
 }
 
-
+// runs query on Testa table, returns result in testaRow array 
 func RunQueryGeneral(t *testing.T, query string,)([]testaRow){
 
-	// open db 
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
@@ -249,15 +272,92 @@ func RunQueryGeneral(t *testing.T, query string,)([]testaRow){
 	}
 
 	rows := mustQueryContext(t, ctx, db, query)
+
 	got := []testaRow{}
-	numRows := 0
 	for rows.Next(){
 		curr := testaRow{A:"", B:"", C:""}
 		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
 			t.Error(err.Error())
 		}
 		got = append(got, curr)
-		numRows ++
+	}
+	rows.Close()
+
+	db.Close()
+	return got
+}
+
+
+func TestQueryTypes( t *testing.T){
+
+	// set up test table
+	curs, err := NewConnector()
+	if err != nil{
+		log.Fatal(err)
+	}
+
+	executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
+		stringt	STRING(1024),
+		bytest BYTES(1024),
+		intt  INT64,
+		floatt   FLOAT64,
+		boolt BOOL
+	)	 PRIMARY KEY (stringt)`}) 
+
+	ExecuteDMLClientLib([]string{`INSERT INTO TypeTesta (stringt,bytest ,intt, floatt, boolt) 
+		VALUES ("aa", CAST("aa" as bytes), 42, 42, TRUE), ("bb", CAST("bb" as bytes),-42, -42, FALSE)`}) 
+
+	// cases
+	/*
+	type test struct {
+        input string
+        want  []typeTestaRow
+    }
+
+	tests := []test{
+		// empty query 
+		{input: "SELECT * FROM TypeTesta WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt",
+		want: []typeTestaRow{
+			{stringt: "aa", ,intt:42, floatt:42, boolt:true},
+			{stringt: "bb", ,intt:-42, floatt:-42, boolt:false},
+		 }},
+	}
+
+
+	// run unit tests 
+
+	*/
+	// drop table 
+	executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
+
+	RunQueryTypes(t, "SELECT * FROM TypeTesta WHERE stringt = \"aa\"")
+
+	// close  
+	curs.Close()
+}
+
+// runs query on Testa table, returns result in testaRow array 
+func RunQueryTypes(t *testing.T, query string,)([]typeTestaRow){
+
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		debug.PrintStack()
+		log.Fatal(err)
+	}
+
+	rows := mustQueryContext(t, ctx, db, query)
+
+	got := []typeTestaRow{}
+	for rows.Next(){
+		curr := typeTestaRow{stringt:"", bytest:nil, intt:-1, floatt:-1, boolt:false}
+		if err := rows.Scan(
+			&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
+			t.Error(err.Error())
+		}
+		got = append(got, curr)
+
+		fmt.Println("XXXXX")
 
 	}
 	rows.Close()
@@ -265,3 +365,4 @@ func RunQueryGeneral(t *testing.T, query string,)([]testaRow){
 	db.Close()
 	return got
 }
+
