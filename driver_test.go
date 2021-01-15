@@ -30,9 +30,6 @@ import (
 	"google.golang.org/api/option"
 	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
 	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
-
-	_ "github.com/rakyll/go-sql-driver-spanner"
-
 )
 
 var(
@@ -160,7 +157,6 @@ func ExecuteDMLClientLib(dml []string){
 		return nil
 		})
 	if (err != nil) { log.Fatal(err) }
-
 }
 
 // end client lib funs 

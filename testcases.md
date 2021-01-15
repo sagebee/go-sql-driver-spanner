@@ -69,7 +69,7 @@ Read NULL into byte |
 Bad Conversion Read tests
 Case | Behavior 
 --- | --- 
-Read bytes into string |  **no rows returned, no error msg**
+Read bytes into string |  
 Read bytes into int | 
 Read bytes into float | 
 Read string into int |
