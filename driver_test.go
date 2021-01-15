@@ -205,11 +205,12 @@ func TestQueryGeneral(t *testing.T){
     }
 
 	tests := []test{
+		// return one row
 		{input: "SELECT * FROM Testa WHERE A = \"a1\"", 
 		want: []testaRow{
 			{A:"a1", B:"b1", C:"c1"},
 		}},
-
+		// return whole table 
 		{input: "SELECT * FROM Testa ORDER BY A", 
 		want: []testaRow{
 			{A:"a1", B:"b1", C:"c1"},
