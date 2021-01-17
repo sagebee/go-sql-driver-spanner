@@ -20,12 +20,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	//"math"
 	"os"
 	"reflect"
 	"runtime/debug"
 	"testing"
-
-	"math"
 
 	// api/lib packages not imported by driver
 	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
@@ -41,7 +40,6 @@ var (
 	dsn      string
 )
 
-// connector things
 type Connector struct {
 	ctx         context.Context
 	client      *spanner.Client
@@ -126,11 +124,9 @@ func executeDdlApi(curs *Connector, ddls []string) {
 		Statements: ddls,
 	})
 	if err != nil {
-		//return nil, err
 		log.Fatal(err)
 	}
 	if err := op.Wait(curs.ctx); err != nil {
-		//return nil, err
 		log.Fatal(err)
 	}
 }
@@ -169,9 +165,6 @@ func ExecuteDMLClientLib(dml []string) {
 
 }
 
-// end client lib funs
-// ******************* //
-
 // helper funs for tests //
 func mustExecContext(t *testing.T, ctx context.Context, db *sql.DB, query string) {
 	_, err := db.ExecContext(ctx, query)
@@ -191,13 +184,14 @@ func mustQueryContext(t *testing.T, ctx context.Context, db *sql.DB, query strin
 }
 
 // Tests general query functionality
-func TestQueryGeneral(t *testing.T) {
+func TestQueryContext(t *testing.T) {
 
 	// set up test table
 	curs, err := NewConnector()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer curs.Close()
 
 	executeDdlApi(curs, []string{`CREATE TABLE Testa (
 		A   STRING(1024),
@@ -208,12 +202,10 @@ func TestQueryGeneral(t *testing.T) {
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
 
 	// cases
-	type test struct {
+	tests := []struct {
 		input string
 		want  []testaRow
-	}
-
-	tests := []test{
+	}{
 		// empty query
 		{input: "", want: []testaRow{}},
 		// syntax error
@@ -248,9 +240,29 @@ func TestQueryGeneral(t *testing.T) {
 		{input: "SELECT * FROM Testaa", want: []testaRow{}},
 	}
 
+	// open db
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		debug.PrintStack()
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	// run tests
 	for _, tc := range tests {
-		got := RunQueryGeneral(t, tc.input)
+
+		rows := mustQueryContext(t, ctx, db, tc.input)
+		got := []testaRow{}
+		for rows.Next() {
+			curr := testaRow{}
+			if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
+				t.Error(err)
+			}
+			got = append(got, curr)
+		}
+		rows.Close()
+
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("expected: %v, got: %v", tc.want, got)
 		}
@@ -261,43 +273,16 @@ func TestQueryGeneral(t *testing.T) {
 	// drop table
 	executeDdlApi(curs, []string{`DROP TABLE Testa`})
 
-	// close connection
-	curs.Close()
 }
 
-// runs query on Testa table, returns result in testaRow array
-func RunQueryGeneral(t *testing.T, query string) []testaRow {
-
-	ctx := context.Background()
-	db, err := sql.Open("spanner", dsn)
-	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
-	}
-
-	rows := mustQueryContext(t, ctx, db, query)
-
-	got := []testaRow{}
-	for rows.Next() {
-		curr := testaRow{A: "", B: "", C: ""}
-		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-			t.Error(err.Error())
-		}
-		got = append(got, curr)
-	}
-	rows.Close()
-
-	db.Close()
-	return got
-}
-
-func TestQueryAtomicTypes(t *testing.T) {
+func TestQueryContextAtomicTypes(t *testing.T) {
 
 	// set up test table
 	curs, err := NewConnector()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer curs.Close()
 
 	executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
 		stringt	STRING(1024),
@@ -314,90 +299,53 @@ func TestQueryAtomicTypes(t *testing.T) {
 		("xxx", CAST("xxx" as bytes), 64, CAST("-inf" AS FLOAT64), TRUE)`})
 
 	// cases
-	type test struct {
+	tests := []struct {
 		input string
 		want  []typeTestaRow
-	}
-
-	tests := []test{
-		// read general values, negitive & pisitive insts
+	}{
+		// read general values, negitive & positive insts
 		{input: "SELECT * FROM TypeTesta WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt",
 			want: []typeTestaRow{
 				{stringt: "aa", bytest: []byte("aa"), intt: 42, floatt: 42, boolt: true},
 				{stringt: "bb", bytest: []byte("bb"), intt: -42, floatt: -42, boolt: false},
 			}},
 		// float special values
-		{input: "SELECT * FROM TypeTesta WHERE stringt = \"x\" ORDER BY stringt",
-			want: []typeTestaRow{
-				{stringt: "x", bytest: []byte("x"), intt: 64, floatt: math.NaN(), boolt: true},
-			}},
+		/*{input: "SELECT * FROM TypeTesta WHERE stringt = \"x\" ORDER BY stringt",
+		want: []typeTestaRow{
+			{stringt: "x", bytest: []byte("x"), intt: 64, floatt: math.NaN(), boolt: true},
+		}},*/
 	}
 
-	// run tests
-	for _, tc := range tests {
-		got := RunQueryAtomicTypes(t, tc.input)
-		if !reflect.DeepEqual(tc.want, got) {
-			t.Errorf("expected: %v, got: %v", tc.want, got)
-		}
-	}
-
-	// heck land
-
-	ffff := RunQueryAtomicTypes(t, "SELECT * FROM typetesta WHERE stringt = \"xx\" ORDER BY stringt")
-	for _, ii := range ffff {
-		fmt.Printf("\n\nMATH INF BITS: {")
-		fmt.Print(math.Float64bits(math.Inf(1)))
-		fmt.Printf("}\nSPANNER INF BITS: {")
-		fmt.Print(math.Float64bits(ii.floatt))
-		if math.Inf(1) == ii.floatt {
-			fmt.Print("	 *** EQUAL")
-		}
-		fmt.Printf("\n")
-	}
-	fff := RunQueryAtomicTypes(t, "SELECT * FROM typetesta WHERE stringt = \"x\" ORDER BY stringt")
-	for _, i := range fff {
-		fmt.Printf("\n\nMATH NAN BITS: {")
-		fmt.Print(math.Float64bits(math.NaN()))
-		fmt.Printf("}\nSPANNER NAN BITS: {")
-		fmt.Print(math.Float64bits(i.floatt))
-		if math.NaN() == i.floatt {
-			fmt.Print("	 *** EQUAL")
-		}
-		fmt.Printf("\n")
-	}
-
-	// end heck land
-
-	// drop table
-	executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
-
-	// close
-	curs.Close()
-}
-
-// runs query on Testa table, returns result in testaRow array
-func RunQueryAtomicTypes(t *testing.T, query string) []typeTestaRow {
-
+	// open db
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
 		debug.PrintStack()
 		log.Fatal(err)
 	}
+	defer db.Close()                
 
-	rows := mustQueryContext(t, ctx, db, query)
+	// run tests
+	for _, tc := range tests {
 
-	got := []typeTestaRow{}
-	for rows.Next() {
-		curr := typeTestaRow{stringt: "", bytest: nil, intt: -1, floatt: -1, boolt: false}
-		if err := rows.Scan(
-			&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
-			t.Error(err.Error())
+		rows := mustQueryContext(t, ctx, db, tc.input)
+		got := []typeTestaRow{}
+		for rows.Next() {
+			curr := typeTestaRow{stringt: "", bytest: nil, intt: -1, floatt: -1, boolt: false}
+			if err := rows.Scan(
+				&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
+				t.Error(err)
+			}
+			got = append(got, curr)
 		}
-		got = append(got, curr)
-	}
-	rows.Close()
+		rows.Close()
 
-	db.Close()
-	return got
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Errorf("expected: %v, got: %v", tc.want, got)
+		}
+	}
+
+	// drop table
+	executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
 }
+

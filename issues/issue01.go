@@ -122,6 +122,7 @@ func main() {
 
 }
 
+// print debigging extravaganza
 func inspectSpannerSpecialFloats(curr sfrow){
 
 	fmt.Printf("\nInspecting: %f %f %f \n\n", curr.notnum, curr.pinf, curr.ninf)
