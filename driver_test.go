@@ -15,38 +15,40 @@
 package spannerdriver
 
 import (
-	"testing"
-	"os"
-	"context"
-	"log"
-	"database/sql"
-	"runtime/debug"
-	"fmt"
-	"reflect"
 	"cloud.google.com/go/spanner"
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
+	"reflect"
+	"runtime/debug"
+	"testing"
 
 	// api/lib packages not imported by driver
-	"google.golang.org/grpc"
-	"google.golang.org/api/option"
 	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
+	"google.golang.org/api/option"
 	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
+	"google.golang.org/grpc"
 )
 
-var(
-	project string
+var (
+	project  string
 	instance string
-	dbname string
-	dsn string
+	dbname   string
+	dsn      string
+	projset  bool
+	instset  bool
+	dbset    bool
 )
 
-// connector things 
 type Connector struct {
-	ctx         context.Context	
+	ctx         context.Context
 	client      *spanner.Client
 	adminClient *adminapi.DatabaseAdminClient
 }
 
-func NewConnector()(*Connector, error){
+func NewConnector() (*Connector, error) {
 
 	ctx := context.Background()
 
@@ -56,21 +58,20 @@ func NewConnector()(*Connector, error){
 		option.WithEndpoint("0.0.0.0:9010"),
 		option.WithGRPCDialOption(grpc.WithInsecure()))
 	if err != nil {
-			return nil, err
+		return nil, err
 	}
 
 	dataClient, err := spanner.NewClient(ctx, dsn)
 	if err != nil {
-			return nil,err
+		return nil, err
 	}
 
 	curs := &Connector{
-		ctx: ctx,
-		client: dataClient,
+		ctx:         ctx,
+		client:      dataClient,
 		adminClient: adminClient,
-
 	}
-	return curs,nil
+	return curs, nil
 }
 
 func (c *Connector) Close() {
@@ -78,71 +79,66 @@ func (c *Connector) Close() {
 	c.adminClient.Close()
 }
 
-// structs for row data 
-type testaRow struct{
+// structs for row data
+type testaRow struct {
 	A string
 	B string
 	C string
 }
 type typeTestaRow struct {
-	stringt string 
-	intt int 
-	floatt float64
-	boolt bool
+	stringt string
+	intt    int
+	floatt  float64
+	boolt   bool
 }
 
-func init(){
+func init() {
 
-	// get environment variables
-	instance = os.Getenv("SPANNER_TEST_INSTANCE")
-	project = os.Getenv("SPANNER_TEST_PROJECT")
-	dbname = os.Getenv("SPANNER_TEST_DBNAME")
+	// get environment variables or set to default
+	if instance, instset = os.LookupEnv("SPANNER_TEST_INSTANCE"); !instset {
+		instance = "test-instance"
+	}
+	if project, projset = os.LookupEnv("SPANNER_TEST_PROJECT"); !projset {
+		project = "test-project"
+	}
+	if dbname, dbset = os.LookupEnv("SPANNER_TEST_DBNAME"); !dbset {
+		dbname = "gotest"
+	}
 
-	// set defaults if none provided 
-	if instance == "" {instance = "test-instance" }
-	if project == "" { project = "test-project" }
-	if dbname == "" { dbname = "gotest" }
-
-	// derive data source name 
+	// derive data source name
 	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
 }
 
-
-// functions that use the client lib / apis ~ 
-// ******************* //
-
-// Executes DDL statements 
-func executeDdlApi(curs *Connector, ddls []string){
+// Executes DDL statements
+func executeDdlApi(curs *Connector, ddls []string) {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
 		Database:   dsn,
 		Statements: ddls,
 	})
 	if err != nil {
-		//return nil, err
 		log.Fatal(err)
 	}
 	if err := op.Wait(curs.ctx); err != nil {
-		//return nil, err
 		log.Fatal(err)
 	}
 }
 
-// executes DML using the client library 
-func ExecuteDMLClientLib(dml []string){
+// executes DML using the client library
+func ExecuteDMLClientLib(dml []string) {
 
 	// open client
-	var db = "projects/"+project+"/instances/"+instance+"/databases/"+dbname;
+	var db = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
 	ctx := context.Background()
 	client, err := spanner.NewClient(ctx, db)
 	if err != nil {
-			log.Fatal(err)
+		log.Fatal(err)
 	}
 	defer client.Close()
 
 	// Put strings into spanner.Statement structure
 	var states []spanner.Statement
-	for _,line := range dml {
+	for _, line := range dml {
 		states = append(states, spanner.NewStatement(line))
 	}
 
@@ -151,111 +147,85 @@ func ExecuteDMLClientLib(dml []string){
 		stmts := states
 		rowCounts, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
-				return err
+			return err
 		}
 		fmt.Printf("Executed %d SQL statements using Batch DML.\n", len(rowCounts))
 		return nil
-		})
-	if (err != nil) { log.Fatal(err) }
-}
-
-// end client lib funs 
-// ******************* //
-
-// helper funs for tests //
-func mustExecContext(t * testing.T, ctx context.Context, db *sql.DB, query string){
-	_,err := db.ExecContext(ctx, query)
+	})
 	if err != nil {
-		debug.PrintStack()
-		t.Fatalf(err.Error())
+		log.Fatal(err)
 	}
 }
 
-func mustQueryContext( t *testing.T, ctx context.Context, db *sql.DB, query string) (rows *sql.Rows){
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	return rows
-}
-
-// Tests general query functionality 
-func TestQueryGeneral(t *testing.T){
+// Tests general query functionality
+func TestQueryContext(t *testing.T) {
 
 	// set up test table
 	curs, err := NewConnector()
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 	}
+	defer curs.Close()
 
 	executeDdlApi(curs, []string{`CREATE TABLE Testa (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
-	)	 PRIMARY KEY (A)`}) 
+	)	 PRIMARY KEY (A)`})
 	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
-		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `}) 
-
+		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
 
 	// cases
-	type test struct {
-        input string
-        want  []testaRow
-    }
-
-	tests := []test{
+	tests := []struct {
+		input string
+		want  []testaRow
+	}{
 		// return one row
-		{input: "SELECT * FROM Testa WHERE A = \"a1\"", 
-		want: []testaRow{
-			{A:"a1", B:"b1", C:"c1"},
-		}},
-		// return whole table 
-		{input: "SELECT * FROM Testa ORDER BY A", 
-		want: []testaRow{
-			{A:"a1", B:"b1", C:"c1"},
-			{A:"a2", B:"b2", C:"c2"},
-			{A:"a3", B:"b3", C:"c3"},
-		}},
+		{input: "SELECT * FROM Testa WHERE A = \"a1\"",
+			want: []testaRow{
+				{A: "a1", B: "b1", C: "c1"},
+			}},
+		// return whole table
+		{input: "SELECT * FROM Testa ORDER BY A",
+			want: []testaRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+				{A: "a3", B: "b3", C: "c3"},
+			}},
 	}
 
-	// run tests
-	for _, tc := range tests {
-		got := RunQueryGeneral(t, tc.input)
-        if !reflect.DeepEqual(tc.want, got) {
-            t.Errorf("expected: %v, got: %v", tc.want, got)
-		}
-	}
-
-	// drop table 
-	executeDdlApi(curs, []string{`DROP TABLE Testa`});
-
-	// close connection 
-	curs.Close()
-}
-
-// runs query on Testa table, returns result in testaRow array 
-func RunQueryGeneral(t *testing.T, query string,)([]testaRow){
-
+	// open db
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
 		debug.PrintStack()
 		log.Fatal(err)
 	}
+	defer db.Close()
 
-	rows := mustQueryContext(t, ctx, db, query)
+	// run tests
+	for _, tc := range tests {
 
-	got := []testaRow{}
-	for rows.Next(){
-		curr := testaRow{A:"", B:"", C:""}
-		if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-			t.Error(err.Error())
+		rows, err := db.QueryContext(ctx, tc.input)
+		if err != nil {
+			t.Fatalf(err.Error())
 		}
-		got = append(got, curr)
-	}
-	rows.Close()
 
-	db.Close()
-	return got
+		got := []testaRow{}
+		for rows.Next() {
+			curr := testaRow{}
+			if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
+				t.Error(err)
+			}
+			got = append(got, curr)
+		}
+		rows.Close()
+
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Errorf("expected: %v, got: %v", tc.want, got)
+		}
+	}
+
+	// drop table
+	executeDdlApi(curs, []string{`DROP TABLE Testa`})
 }
