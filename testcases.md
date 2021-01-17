@@ -31,7 +31,7 @@ Case | Behavior
 STRING | reads string into strink ok
 INT64 | reads into int ok 
 negative INF64 | reads into int ok 
-BYTES | **won't return any rows if bytes type is there**
+BYTES | **fixed**
 BOOL | reads into bool ok
 FLOAT64 | reads into float ok
 negative FLOAT64 | reads into float ok
@@ -40,6 +40,10 @@ NaN |
 -inf |
 " quotes around str |
 ' quotes around str |
+max int |
+min int |
+max float |
+min float |
 
 <br>
 <br>
