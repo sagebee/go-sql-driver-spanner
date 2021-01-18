@@ -35,11 +35,13 @@ import (
 var (
 	project  string
 	instance string
-	dbname   string
+	dbid   string
 	dsn      string
+	emhost	string
 	projset  bool
 	instset  bool
 	dbset    bool
+	emset	bool
 )
 
 type Connector struct {
@@ -48,17 +50,27 @@ type Connector struct {
 	adminClient *adminapi.DatabaseAdminClient
 }
 
-func NewConnector() (*Connector, error) {
+func NewConnector(emhost string, emset bool) (*Connector, error) {
 
 	ctx := context.Background()
 
-	adminClient, err := adminapi.NewDatabaseAdminClient(
-		ctx,
-		option.WithoutAuthentication(),
-		option.WithEndpoint("0.0.0.0:9010"),
-		option.WithGRPCDialOption(grpc.WithInsecure()))
-	if err != nil {
-		return nil, err
+	var adminClient *adminapi.DatabaseAdminClient
+	var err error
+
+	if emset{
+		adminClient, err = adminapi.NewDatabaseAdminClient(
+			ctx,
+			option.WithoutAuthentication(),
+			option.WithEndpoint(emhost),
+			option.WithGRPCDialOption(grpc.WithInsecure()))
+		if err != nil {
+			return nil, err
+		}
+	}else{
+		adminClient, err = adminapi.NewDatabaseAdminClient(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dataClient, err := spanner.NewClient(ctx, dsn)
@@ -101,38 +113,42 @@ func init() {
 	if project, projset = os.LookupEnv("SPANNER_TEST_PROJECT"); !projset {
 		project = "test-project"
 	}
-	if dbname, dbset = os.LookupEnv("SPANNER_TEST_DBNAME"); !dbset {
-		dbname = "gotest"
+	if dbid, dbset = os.LookupEnv("SPANNER_TEST_DBID"); !dbset {
+		dbid = "gotest"
 	}
 
 	// derive data source name
-	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
+	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbid
+
+	// configure emulator if set 
+	emhost, emset = os.LookupEnv("SPANNER_EMULATOR_HOST")
+
 }
 
 // Executes DDL statements
-func executeDdlApi(curs *Connector, ddls []string) {
+func executeDdlApi(curs *Connector, ddls []string) (err error) {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
 		Database:   dsn,
 		Statements: ddls,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := op.Wait(curs.ctx); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // executes DML using the client library
-func ExecuteDMLClientLib(dml []string) {
+func ExecuteDMLClientLib(dml []string) (err error) {
 
 	// open client
-	var db = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
 	ctx := context.Background()
-	client, err := spanner.NewClient(ctx, db)
+	client, err := spanner.NewClient(ctx, dsn)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer client.Close()
 
@@ -153,27 +169,34 @@ func ExecuteDMLClientLib(dml []string) {
 		return nil
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // Tests general query functionality
 func TestQueryContext(t *testing.T) {
 
 	// set up test table
-	curs, err := NewConnector()
+	curs, err := NewConnector(emhost,emset)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer curs.Close()
 
-	executeDdlApi(curs, []string{`CREATE TABLE Testa (
+	err = executeDdlApi(curs, []string{`CREATE TABLE Testa (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`})
-	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
+	if err != nil{
+		t.Error(err)
+	}
+	err = ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
+	if err != nil{
+		t.Error(err)
+	}
 
 	// cases
 	tests := []struct {
@@ -227,5 +250,8 @@ func TestQueryContext(t *testing.T) {
 	}
 
 	// drop table
-	executeDdlApi(curs, []string{`DROP TABLE Testa`})
+	err = executeDdlApi(curs, []string{`DROP TABLE Testa`})
+	if err != nil{
+		t.Error(err)
+	}
 }
