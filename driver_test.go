@@ -33,9 +33,6 @@ import (
 )
 
 var (
-	projectId  string
-	instanceId string
-	databaseId string
 	dsn        string
 )
 
@@ -114,8 +111,6 @@ func init() {
 
 	// derive data source name
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
-
-	//log.Fatal(dsn)
 }
 
 // Executes DDL statements
