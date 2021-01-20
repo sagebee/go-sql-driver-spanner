@@ -35,11 +35,11 @@ BYTES | **fixed**
 BOOL | reads into bool ok
 FLOAT64 | reads into float ok
 negative FLOAT64 | reads into float ok
-NaN |
-+inf |
--inf |
-" quotes around str |
-' quotes around str |
+NaN |   **strange behavior**
++inf | equals math.Inf(1)
+-inf |  equals math.Inf(-1)
+" quotes around str | no errors, returns query 
+' quotes around str | no errors, returns query
 max int |
 min int |
 max float |
@@ -52,9 +52,10 @@ Overflow Read tests
 Case | Behavior 
 --- | --- 
 Read too large string | 
-Read too large bytes | 
-Read too large int |
-Read too large float |
+Read too large bytes | sql error: *unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8*
+Read too large int | sql: Scan error on column index 2, name "intt": converting driver.Value type int64 ("9223372036854775807") to a int8: value out of range* to STDOUT, doesn't read into int
+Read too large float | It tries, has floating point precision problems 
+**All** | If a scan error happens, rows.scan stops reading after errror. All values scanned before error are scanned, and none at or after the error are read.
 
 
 <br>
@@ -80,6 +81,7 @@ Read int into float |
 Read float into int |
 Read bool into string |
 Read int into bool |
+Read negative into into unsigned int |
 
 <br>
 <br>

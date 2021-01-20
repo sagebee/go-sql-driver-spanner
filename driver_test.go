@@ -113,22 +113,20 @@ func init() {
 	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
 }
 
-// functions that use the client lib / apis ~
-// ******************* //
-
 // Executes DDL statements
-func executeDdlApi(curs *Connector, ddls []string) {
+func executeDdlApi(curs *Connector, ddls []string) (err error) {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
 		Database:   dsn,
 		Statements: ddls,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err := op.Wait(curs.ctx); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // executes DML using the client library
@@ -193,11 +191,14 @@ func TestQueryContext(t *testing.T) {
 	}
 	defer curs.Close()
 
-	executeDdlApi(curs, []string{`CREATE TABLE Testa (
+	err = executeDdlApi(curs, []string{`CREATE TABLE Testa (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`})
+	if err != nil{
+		t.Error(err)
+	}
 	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
 
@@ -271,11 +272,14 @@ func TestQueryContext(t *testing.T) {
 	// TODO attribute subset, won'w work with existing fun
 
 	// drop table
-	executeDdlApi(curs, []string{`DROP TABLE Testa`})
+	err = executeDdlApi(curs, []string{`DROP TABLE Testa`})
+	if err != nil{
+		t.Error(err)
+	}
 
 }
 
-func TestQueryContextAtomicTypes(t *testing.T) {
+func TestQueryContextAtomicTypes(t *testing.T){
 
 	// set up test table
 	curs, err := NewConnector()
@@ -284,13 +288,16 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 	}
 	defer curs.Close()
 
-	executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
+	err = executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
 		stringt	STRING(1024),
 		bytest BYTES(1024),
 		intt  INT64,
 		floatt   FLOAT64,
 		boolt BOOL
 	)	 PRIMARY KEY (stringt)`})
+	if err != nil {
+		t.Error(err)
+	}
 
 	ExecuteDMLClientLib([]string{`INSERT INTO TypeTesta (stringt,bytest ,intt, floatt, boolt) 
 		VALUES ("aa", CAST("aa" as bytes), 42, 42, TRUE), ("bb", CAST("bb" as bytes),-42, -42, FALSE),
@@ -346,6 +353,112 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 	}
 
 	// drop table
-	executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
+	err = executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
+	if err != nil {
+		t.Error(err)
+	}
 }
+
+
+// special tests that don't work well in table format
+func TestQueryContextOverflowTypes(t *testing.T){
+
+	// set up test table
+	curs, err := NewConnector()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer curs.Close()
+
+	err = executeDdlApi(curs, []string{`CREATE TABLE TypeTestb (
+		stringt	STRING(1024),
+		bytest BYTES(1024),
+		intt  INT64,
+		floatt   FLOAT64,
+		boolt BOOL
+	)	 PRIMARY KEY (stringt)`})
+	if err != nil {
+		t.Error(err)
+	}
+
+	ExecuteDMLClientLib([]string{`INSERT INTO TypeTestb (stringt,bytest ,intt, floatt, boolt) 
+		VALUES ("aa", CAST("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV" as bytes),9223372036854775807,
+		 3, TRUE)`})
+
+	// open db
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		debug.PrintStack()
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// read 
+	var strine string 
+	var tinybytes []byte
+	var tinyint int8
+	var tinyfloat float32 
+	var bl bool
+
+	rows := mustQueryContext(t, ctx, db, "SELECT * FROM TypeTestb")
+	for rows.Next() {
+		if err := rows.Scan(
+			&strine, &tinybytes, &tinyint, &tinyfloat, &bl); err != nil {
+			fmt.Println(reflect.TypeOf(err))
+			fmt.Printf("ERROR NOT NIL\n\n\n\n")	
+			t.Error(err)
+		}
+	}
+	rows.Close()
+
+	fmt.Printf("XXX %x %d %f %t\n",  tinybytes, tinyint, tinyfloat, bl)
+
+	// drop table
+	err = executeDdlApi(curs, []string{`DROP TABLE TypeTestb`})
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Error("DHFKJDH")
+
+}
+
+
+/*
+// using query context, from doc 
+func TestHeck(t *testing.T){
+
+	// run DDL on the driver
+
+	dbb, err := sql.Open(
+		"spanner",
+		"projects/test-project/instances/test-instance/databases/gotest",
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dbb.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	_, err = dbb.ExecContext(
+		ctx,
+		`CREATE TABLE Singers (
+				SingerId   INT64 NOT NULL,
+				FirstName  STRING(1024),
+				LastName   STRING(1024),
+				SingerInfo BYTES(MAX)
+			) PRIMARY KEY (SingerId)`,
+	)
+	if err != nil{
+		debug.PrintStack()
+		t.Error(err)
+	}
+
+	log.Print("Created tables.")
+}	
+
+*/
 

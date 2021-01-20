@@ -1,3 +1,8 @@
+
+trace error
+- https://stackoverflow.com/questions/33034241/how-to-get-the-stack-trace-pointing-to-actual-error-reason
+
+
 ~ Go Packages ~
 
 - https://pkg.go.dev/cloud.google.com/go/spanner

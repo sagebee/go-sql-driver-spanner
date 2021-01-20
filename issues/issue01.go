@@ -1,5 +1,11 @@
 package main
 
+
+// Very very strange FLOAT64 NaN equality thing
+
+// The NaN value returned by spanner is not equal to the golangs math library NaN
+// Even thoguh they have equal bits and types
+
 import (
 	"context"
 	"log"
