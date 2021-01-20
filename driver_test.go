@@ -25,7 +25,7 @@ import (
 	"runtime/debug"
 	"testing"
 
-	// api/lib packages not imported by driver
+	// API/lib packages not imported by driver.
 	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
 	"google.golang.org/api/option"
 	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
@@ -44,7 +44,7 @@ type Connector struct {
 
 func NewConnector() (*Connector, error) {
 
-	// configure emulator if set
+	// Configure emulator if set.
 	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
 
 	ctx := context.Background()
@@ -86,7 +86,7 @@ func (c *Connector) Close() {
 	c.adminClient.Close()
 }
 
-// structs for row data
+// Structs for row data.
 type testQueryContextRow struct {
 	A string
 	B string
@@ -98,7 +98,7 @@ func init() {
 	var projectId, instanceId, databaseId string
 	var ok bool
 
-	// get environment variables or set to default
+	// Get environment variables or set to default.
 	if instanceId, ok = os.LookupEnv("SPANNER_TEST_INSTANCE"); !ok {
 		instanceId = "test-instance"
 	}
@@ -109,11 +109,11 @@ func init() {
 		databaseId = "gotest"
 	}
 
-	// derive data source name
+	// Derive data source name.
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
-// Executes DDL statements
+// Executes DDL statements.
 func executeDdlApi(curs *Connector, ddls []string) (err error) {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
@@ -132,7 +132,7 @@ func executeDdlApi(curs *Connector, ddls []string) (err error) {
 // Executes DML using the client library.
 func ExecuteDMLClientLib(dml []string) (err error) {
 
-	// open client
+	// Open client/
 	ctx := context.Background()
 	client, err := spanner.NewClient(ctx, dsn)
 	if err != nil {
@@ -146,7 +146,7 @@ func ExecuteDMLClientLib(dml []string) (err error) {
 		stmts = append(stmts, spanner.NewStatement(line))
 	}
 
-	// Execute statements
+	// Execute statements.
 	_, err = client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		stmts := stmts
 		rowCounts, err := txn.BatchUpdate(ctx, stmts)
@@ -162,7 +162,7 @@ func ExecuteDMLClientLib(dml []string) (err error) {
 
 func TestQueryContext(t *testing.T) {
 
-	// set up test table
+	// Set up test table.
 	curs, err := NewConnector()
 	if err != nil {
 		log.Fatal(err)
@@ -187,12 +187,12 @@ func TestQueryContext(t *testing.T) {
 		input string
 		want  []testQueryContextRow
 	}{
-		// return one row
+		// Return one row.
 		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 			}},
-		// return whole table
+		// Return whole table.
 		{input: "SELECT * FROM TestQueryContext ORDER BY A",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
@@ -201,7 +201,7 @@ func TestQueryContext(t *testing.T) {
 			}},
 	}
 
-	// open db
+	// Open db.
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
@@ -210,13 +210,14 @@ func TestQueryContext(t *testing.T) {
 	}
 	defer db.Close()
 
-	// run tests
+	// Run tests
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
 		if err != nil {
 			t.Fatalf(err.Error()) //  ~ err doesn't get set qhen qury fails
 		}
+		defer rows.Close()
 
 		got := []testQueryContextRow{}
 		for rows.Next() {
@@ -226,14 +227,13 @@ func TestQueryContext(t *testing.T) {
 			}
 			got = append(got, curr)
 		}
-		rows.Close()
 
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("expected: %v, got: %v", tc.want, got)
 		}
 	}
 
-	// drop table
+	// Drop table.
 	err = executeDdlApi(curs, []string{`DROP TABLE TestQueryContext`})
 	if err != nil {
 		t.Error(err)
