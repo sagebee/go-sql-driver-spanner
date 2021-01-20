@@ -33,15 +33,10 @@ import (
 )
 
 var (
-	project  string
-	instance string
-	dbid   string
-	dsn      string
-	emhost	string
-	projset  bool
-	instset  bool
-	dbset    bool
-	emset	bool
+	projectId  string
+	instanceId string
+	databaseId string
+	dsn        string
 )
 
 type Connector struct {
@@ -50,23 +45,26 @@ type Connector struct {
 	adminClient *adminapi.DatabaseAdminClient
 }
 
-func NewConnector(emhost string, emset bool) (*Connector, error) {
+func NewConnector() (*Connector, error) {
+
+	// configure emulator if set
+	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
 
 	ctx := context.Background()
 
 	var adminClient *adminapi.DatabaseAdminClient
 	var err error
 
-	if emset{
+	if ok {
 		adminClient, err = adminapi.NewDatabaseAdminClient(
 			ctx,
 			option.WithoutAuthentication(),
-			option.WithEndpoint(emhost),
+			option.WithEndpoint(spannerHost),
 			option.WithGRPCDialOption(grpc.WithInsecure()))
 		if err != nil {
 			return nil, err
 		}
-	}else{
+	} else {
 		adminClient, err = adminapi.NewDatabaseAdminClient(ctx)
 		if err != nil {
 			return nil, err
@@ -92,37 +90,32 @@ func (c *Connector) Close() {
 }
 
 // structs for row data
-type testaRow struct {
+type testQueryContextRow struct {
 	A string
 	B string
 	C string
 }
-type typeTestaRow struct {
-	stringt string
-	intt    int
-	floatt  float64
-	boolt   bool
-}
 
 func init() {
 
+	var projectId, instanceId, databaseId string
+	var ok bool
+
 	// get environment variables or set to default
-	if instance, instset = os.LookupEnv("SPANNER_TEST_INSTANCE"); !instset {
-		instance = "test-instance"
+	if instanceId, ok = os.LookupEnv("SPANNER_TEST_INSTANCE"); !ok {
+		instanceId = "test-instance"
 	}
-	if project, projset = os.LookupEnv("SPANNER_TEST_PROJECT"); !projset {
-		project = "test-project"
+	if projectId, ok = os.LookupEnv("SPANNER_TEST_PROJECT"); !ok {
+		projectId = "test-project"
 	}
-	if dbid, dbset = os.LookupEnv("SPANNER_TEST_DBID"); !dbset {
-		dbid = "gotest"
+	if databaseId, ok = os.LookupEnv("SPANNER_TEST_DBID"); !ok {
+		databaseId = "gotest"
 	}
 
 	// derive data source name
-	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbid
+	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 
-	// configure emulator if set 
-	emhost, emset = os.LookupEnv("SPANNER_EMULATOR_HOST")
-
+	//log.Fatal(dsn)
 }
 
 // Executes DDL statements
@@ -141,7 +134,7 @@ func executeDdlApi(curs *Connector, ddls []string) (err error) {
 	return nil
 }
 
-// executes DML using the client library
+// Executes DML using the client library.
 func ExecuteDMLClientLib(dml []string) (err error) {
 
 	// open client
@@ -152,15 +145,15 @@ func ExecuteDMLClientLib(dml []string) (err error) {
 	}
 	defer client.Close()
 
-	// Put strings into spanner.Statement structure
-	var states []spanner.Statement
+	// Put strings into spanner.Statement structure.
+	var stmts []spanner.Statement
 	for _, line := range dml {
-		states = append(states, spanner.NewStatement(line))
+		stmts = append(stmts, spanner.NewStatement(line))
 	}
 
-	// execute statements
+	// Execute statements
 	_, err = client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		stmts := states
+		stmts := stmts
 		rowCounts, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
 			return err
@@ -168,49 +161,45 @@ func ExecuteDMLClientLib(dml []string) (err error) {
 		fmt.Printf("Executed %d SQL statements using Batch DML.\n", len(rowCounts))
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	return nil
+
+	return err
 }
 
-// Tests general query functionality
 func TestQueryContext(t *testing.T) {
 
 	// set up test table
-	curs, err := NewConnector(emhost,emset)
+	curs, err := NewConnector()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer curs.Close()
 
-	err = executeDdlApi(curs, []string{`CREATE TABLE Testa (
+	err = executeDdlApi(curs, []string{`CREATE TABLE TestQueryContext (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`})
-	if err != nil{
+	if err != nil {
 		t.Error(err)
 	}
-	err = ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
+	err = ExecuteDMLClientLib([]string{`INSERT INTO TestQueryContext (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
-	if err != nil{
+	if err != nil {
 		t.Error(err)
 	}
 
-	// cases
 	tests := []struct {
 		input string
-		want  []testaRow
+		want  []testQueryContextRow
 	}{
 		// return one row
-		{input: "SELECT * FROM Testa WHERE A = \"a1\"",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 			}},
 		// return whole table
-		{input: "SELECT * FROM Testa ORDER BY A",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext ORDER BY A",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 				{A: "a3", B: "b3", C: "c3"},
@@ -231,12 +220,12 @@ func TestQueryContext(t *testing.T) {
 
 		rows, err := db.QueryContext(ctx, tc.input)
 		if err != nil {
-			t.Fatalf(err.Error())
+			t.Fatalf(err.Error()) //  ~ err doesn't get set qhen qury fails
 		}
 
-		got := []testaRow{}
+		got := []testQueryContextRow{}
 		for rows.Next() {
-			curr := testaRow{}
+			curr := testQueryContextRow{}
 			if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
 				t.Error(err)
 			}
@@ -250,8 +239,8 @@ func TestQueryContext(t *testing.T) {
 	}
 
 	// drop table
-	err = executeDdlApi(curs, []string{`DROP TABLE Testa`})
-	if err != nil{
+	err = executeDdlApi(curs, []string{`DROP TABLE TestQueryContext`})
+	if err != nil {
 		t.Error(err)
 	}
 }
