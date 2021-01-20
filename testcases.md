@@ -52,7 +52,7 @@ Overflow Read tests
 Case | Behavior 
 --- | --- 
 Read too large string | 
-Read too large bytes | sql error: *unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8*
+Read too large bytes | sql error printed to STDOUT, error not nil 
 Read too large int | sql: Scan error on column index 2, name "intt": converting driver.Value type int64 ("9223372036854775807") to a int8: value out of range* to STDOUT, doesn't read into int
 Read too large float | It tries, has floating point precision problems 
 **All** | If a scan error happens, rows.scan stops reading after errror. All values scanned before error are scanned, and none at or after the error are read.
