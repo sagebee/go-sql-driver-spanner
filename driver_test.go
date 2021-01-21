@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	dsn        string
+	dsn string
 )
 
 type Connector struct {
@@ -84,13 +84,6 @@ func NewConnector() (*Connector, error) {
 func (c *Connector) Close() {
 	c.client.Close()
 	c.adminClient.Close()
-}
-
-// Structs for row data.
-type testQueryContextRow struct {
-	A string
-	B string
-	C string
 }
 
 func init() {
@@ -183,22 +176,47 @@ func TestQueryContext(t *testing.T) {
 		t.Error(err)
 	}
 
+	type testQueryContextRow struct {
+		A,B,C string
+	}
+
 	tests := []struct {
-		input string
-		want  []testQueryContextRow
+		input     string
+		want      []testQueryContextRow
+		wantError error
 	}{
-		// Return one row.
+		// empty query
+		{input: "", want: []testQueryContextRow{}},
+		// syntax error
+		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
+		// retur nothing
+		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
+		// return one tuple
 		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 			}},
-		// Return whole table.
+		// return subset of tuples
+		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\" OR A = \"a2\"",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+			}},
+		// subet of tuples with !=
+		{input: "SELECT * FROM TestQueryContext WHERE A != \"a3\"",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+			}},
+		// return entire table
 		{input: "SELECT * FROM TestQueryContext ORDER BY A",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 				{A: "a3", B: "b3", C: "c3"},
 			}},
+		// query non existant table
+		{input: "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
 	}
 
 	// Open db.
@@ -214,7 +232,7 @@ func TestQueryContext(t *testing.T) {
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if err != nil {
+		if err != tc.wantError {
 			t.Fatalf(err.Error()) //  ~ err doesn't get set qhen qury fails
 		}
 		defer rows.Close()
