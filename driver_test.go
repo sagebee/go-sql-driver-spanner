@@ -20,13 +20,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	//"math"
 	"os"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"testing"
 
-	// api/lib packages not imported by driver
+	// API/lib packages not imported by driver.
 	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
 	"google.golang.org/api/option"
 	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
@@ -34,10 +34,7 @@ import (
 )
 
 var (
-	project  string
-	instance string
-	dbname   string
-	dsn      string
+	dsn string
 )
 
 type Connector struct {
@@ -48,15 +45,28 @@ type Connector struct {
 
 func NewConnector() (*Connector, error) {
 
+	// Configure emulator if set.
+	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
+
 	ctx := context.Background()
 
-	adminClient, err := adminapi.NewDatabaseAdminClient(
-		ctx,
-		option.WithoutAuthentication(),
-		option.WithEndpoint("0.0.0.0:9010"),
-		option.WithGRPCDialOption(grpc.WithInsecure()))
-	if err != nil {
-		return nil, err
+	var adminClient *adminapi.DatabaseAdminClient
+	var err error
+
+	if ok {
+		adminClient, err = adminapi.NewDatabaseAdminClient(
+			ctx,
+			option.WithoutAuthentication(),
+			option.WithEndpoint(spannerHost),
+			option.WithGRPCDialOption(grpc.WithInsecure()))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		adminClient, err = adminapi.NewDatabaseAdminClient(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dataClient, err := spanner.NewClient(ctx, dsn)
@@ -77,43 +87,37 @@ func (c *Connector) Close() {
 	c.adminClient.Close()
 }
 
-// structs for row data
-type testaRow struct {
-	A string
-	B string
-	C string
-}
-type typeTestaRow struct {
-	stringt string
-	bytest  []byte
-	intt    int
-	floatt  float64
-	boolt   bool
+func ErrorContains(err error, want string) bool {
+	if want == "" && err != nil{
+		return false
+	}
+	if err == nil{
+		return want == ""
+	}
+	return strings.Contains(err.Error(), want)
 }
 
 func init() {
 
-	// get environment variables
-	instance = os.Getenv("SPANNER_TEST_INSTANCE")
-	project = os.Getenv("SPANNER_TEST_PROJECT")
-	dbname = os.Getenv("SPANNER_TEST_DBNAME")
+	var projectId, instanceId, databaseId string
+	var ok bool
 
-	// set defaults if none provided
-	if instance == "" {
-		instance = "test-instance"
+	// Get environment variables or set to default.
+	if instanceId, ok = os.LookupEnv("SPANNER_TEST_INSTANCE"); !ok {
+		instanceId = "test-instance"
 	}
-	if project == "" {
-		project = "test-project"
+	if projectId, ok = os.LookupEnv("SPANNER_TEST_PROJECT"); !ok {
+		projectId = "test-project"
 	}
-	if dbname == "" {
-		dbname = "gotest"
+	if databaseId, ok = os.LookupEnv("SPANNER_TEST_DBID"); !ok {
+		databaseId = "gotest"
 	}
 
-	// derive data source name
-	dsn = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
+	// Derive data source name.
+	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
-// Executes DDL statements
+// Executes DDL statements.
 func executeDdlApi(curs *Connector, ddls []string) (err error) {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
@@ -129,27 +133,26 @@ func executeDdlApi(curs *Connector, ddls []string) (err error) {
 	return nil
 }
 
-// executes DML using the client library
-func ExecuteDMLClientLib(dml []string) {
+// Executes DML using the client library.
+func ExecuteDMLClientLib(dml []string) (err error) {
 
-	// open client
-	var db = "projects/" + project + "/instances/" + instance + "/databases/" + dbname
+	// Open client/
 	ctx := context.Background()
-	client, err := spanner.NewClient(ctx, db)
+	client, err := spanner.NewClient(ctx, dsn)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer client.Close()
 
-	// Put strings into spanner.Statement structure
-	var states []spanner.Statement
+	// Put strings into spanner.Statement structure.
+	var stmts []spanner.Statement
 	for _, line := range dml {
-		states = append(states, spanner.NewStatement(line))
+		stmts = append(stmts, spanner.NewStatement(line))
 	}
 
-	// execute statements
+	// Execute statements.
 	_, err = client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		stmts := states
+		stmts := stmts
 		rowCounts, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
 			return err
@@ -157,91 +160,77 @@ func ExecuteDMLClientLib(dml []string) {
 		fmt.Printf("Executed %d SQL statements using Batch DML.\n", len(rowCounts))
 		return nil
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
 
+	return err
 }
 
-// helper funs for tests //
-func mustExecContext(t *testing.T, ctx context.Context, db *sql.DB, query string) {
-	_, err := db.ExecContext(ctx, query)
-	if err != nil {
-		debug.PrintStack()
-		t.Fatalf(err.Error())
-	}
-}
-
-func mustQueryContext(t *testing.T, ctx context.Context, db *sql.DB, query string) (rows *sql.Rows) {
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	return rows
-}
-
-// Tests general query functionality
 func TestQueryContext(t *testing.T) {
 
-	// set up test table
+	// Set up test table.
 	curs, err := NewConnector()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer curs.Close()
 
-	err = executeDdlApi(curs, []string{`CREATE TABLE Testa (
+	err = executeDdlApi(curs, []string{`CREATE TABLE TestQueryContext (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`})
-	if err != nil{
+	if err != nil {
 		t.Error(err)
 	}
-	ExecuteDMLClientLib([]string{`INSERT INTO Testa (A, B, C) 
+	err = ExecuteDMLClientLib([]string{`INSERT INTO TestQueryContext (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
+	if err != nil {
+		t.Error(err)
+	}
 
-	// cases
+	type testQueryContextRow struct {
+		A, B, C string
+	}
+
 	tests := []struct {
-		input string
-		want  []testaRow
+		input     string
+		want      []testQueryContextRow
+		wantError error
 	}{
 		// empty query
-		{input: "", want: []testaRow{}},
+		{input: "", want: []testQueryContextRow{}},
 		// syntax error
-		{input: "SELECT SELECT * FROM Testa", want: []testaRow{}},
+		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
 		// retur nothing
-		{input: "SELECT SELECT * FROM Testa", want: []testaRow{}},
+		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
 		// return one tuple
-		{input: "SELECT * FROM Testa WHERE A = \"a1\"",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 			}},
 		// return subset of tuples
-		{input: "SELECT * FROM Testa WHERE A = \"a1\" OR A = \"a2\"",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\" OR A = \"a2\"",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 			}},
 		// subet of tuples with !=
-		{input: "SELECT * FROM Testa WHERE A != \"a3\"",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext WHERE A != \"a3\"",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 			}},
 		// return entire table
-		{input: "SELECT * FROM Testa ORDER BY A",
-			want: []testaRow{
+		{input: "SELECT * FROM TestQueryContext ORDER BY A",
+			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 				{A: "a3", B: "b3", C: "c3"},
 			}},
 		// query non existant table
-		{input: "SELECT * FROM Testaa", want: []testaRow{}},
+		{input: "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
 	}
 
-	// open db
+	// Open db.
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
@@ -250,36 +239,37 @@ func TestQueryContext(t *testing.T) {
 	}
 	defer db.Close()
 
-	// run tests
+	// Run tests
 	for _, tc := range tests {
 
-		rows := mustQueryContext(t, ctx, db, tc.input)
-		got := []testaRow{}
+		rows, err := db.QueryContext(ctx, tc.input)
+		if err != tc.wantError {
+			t.Errorf("Unexpected error, got %#v want %#v", err, tc.wantError) //  ~ err doesn't get set qhen qury fails
+		}
+		defer rows.Close()
+
+		got := []testQueryContextRow{}
 		for rows.Next() {
-			curr := testaRow{}
+			curr := testQueryContextRow{}
 			if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
 				t.Error(err)
 			}
 			got = append(got, curr)
 		}
-		rows.Close()
 
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("expected: %v, got: %v", tc.want, got)
 		}
 	}
 
-	// TODO attribute subset, won'w work with existing fun
-
-	// drop table
-	err = executeDdlApi(curs, []string{`DROP TABLE Testa`})
-	if err != nil{
+	// Drop table.
+	err = executeDdlApi(curs, []string{`DROP TABLE TestQueryContext`})
+	if err != nil {
 		t.Error(err)
 	}
-
 }
 
-func TestQueryContextAtomicTypes(t *testing.T){
+func TestQueryContextAtomicTypes(t *testing.T) {
 
 	// set up test table
 	curs, err := NewConnector()
@@ -288,57 +278,89 @@ func TestQueryContextAtomicTypes(t *testing.T){
 	}
 	defer curs.Close()
 
-	err = executeDdlApi(curs, []string{`CREATE TABLE TypeTesta (
+	executeDdlApi(curs, []string{`CREATE TABLE TestQueryType (
 		stringt	STRING(1024),
 		bytest BYTES(1024),
 		intt  INT64,
 		floatt   FLOAT64,
 		boolt BOOL
 	)	 PRIMARY KEY (stringt)`})
-	if err != nil {
-		t.Error(err)
-	}
 
-	ExecuteDMLClientLib([]string{`INSERT INTO TypeTesta (stringt,bytest ,intt, floatt, boolt) 
+	ExecuteDMLClientLib([]string{`INSERT INTO TestQueryType (stringt,bytest ,intt, floatt, boolt) 
 		VALUES ("aa", CAST("aa" as bytes), 42, 42, TRUE), ("bb", CAST("bb" as bytes),-42, -42, FALSE),
 		("x", CAST("x" as bytes), 64, CAST("nan" AS FLOAT64), TRUE), 
 		("xx", CAST("xx" as bytes), 64, CAST("inf" AS FLOAT64), TRUE),
-		("xxx", CAST("xxx" as bytes), 64, CAST("-inf" AS FLOAT64), TRUE)`})
+		("xxx", CAST("xxx" as bytes), 64, CAST("-inf" AS FLOAT64), TRUE),
+		("byteoverflow", CAST("abcdefghijklmnop" as bytes), 42, 42, TRUE)`})
 
-	// cases
+	type testQueryTypetRow struct {
+		stringt string
+		bytest  []byte
+		intt    int
+		floatt  float64
+		boolt   bool
+	}
+
+	type TestQueryOverflowRow struct {
+		stringt string
+		bytest  [2]byte
+		intt    int8
+		floatt  float32
+		boolt   bool
+	}
+
 	tests := []struct {
-		input string
-		want  []typeTestaRow
+		input     string
+		want      []testQueryTypetRow
+		wantError error
 	}{
-		// read general values, negitive & positive insts
-		{input: "SELECT * FROM TypeTesta WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt",
-			want: []typeTestaRow{
+		// Read general values, negitive & positive insts
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt",
+			want: []testQueryTypetRow{
 				{stringt: "aa", bytest: []byte("aa"), intt: 42, floatt: 42, boolt: true},
 				{stringt: "bb", bytest: []byte("bb"), intt: -42, floatt: -42, boolt: false},
 			}},
 		// float special values
-		/*{input: "SELECT * FROM TypeTesta WHERE stringt = \"x\" ORDER BY stringt",
-		want: []typeTestaRow{
+		/*{input: "SELECT * FROM TestQueryType WHERE stringt = \"x\" ORDER BY stringt",
+		want: []testQueryTypetRow{
 			{stringt: "x", bytest: []byte("x"), intt: 64, floatt: math.NaN(), boolt: true},
-		}},*/
+		}},*/ // unexpected behavior
 	}
 
-	// open db
+	overflowTests := []struct {
+		input     string
+		want      []TestQueryOverflowRow
+		wantError string
+	}{
+		// Read too large bytes
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"byteoverflow\"",
+			wantError: "unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8",
+			want: []TestQueryOverflowRow{
+				{stringt: "byteoverflow", intt: 0, floatt: 0, boolt: false},
+			}},
+	}
+
+	// Open db.
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
 		debug.PrintStack()
 		log.Fatal(err)
 	}
-	defer db.Close()                
+	defer db.Close()
 
-	// run tests
+	// Run tests.
 	for _, tc := range tests {
 
-		rows := mustQueryContext(t, ctx, db, tc.input)
-		got := []typeTestaRow{}
+		rows, err := db.QueryContext(ctx, tc.input)
+		if err != tc.wantError {
+			t.Errorf("Unexpected error, got %#v want %#v", err, tc.wantError)
+		}
+		defer rows.Close()
+
+		got := []testQueryTypetRow{}
 		for rows.Next() {
-			curr := typeTestaRow{stringt: "", bytest: nil, intt: -1, floatt: -1, boolt: false}
+			curr := testQueryTypetRow{stringt: "", bytest: nil, intt: -1, floatt: -1, boolt: false}
 			if err := rows.Scan(
 				&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
 				t.Error(err)
@@ -352,15 +374,37 @@ func TestQueryContextAtomicTypes(t *testing.T){
 		}
 	}
 
-	// drop table
-	err = executeDdlApi(curs, []string{`DROP TABLE TypeTesta`})
-	if err != nil {
-		t.Error(err)
+	// Run overflow tests
+	for _, otc := range overflowTests {
+
+		rows, err := db.QueryContext(ctx, otc.input)
+		if err != nil {
+			t.Error(err)
+		}
+		defer rows.Close()
+
+		got := []TestQueryOverflowRow{}
+		for rows.Next() {
+			curr := TestQueryOverflowRow{}
+			err := rows.Scan(
+				&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt)
+			if ! ErrorContains(err,otc.wantError){
+				t.Errorf("Unexpected error %v", err)
+			}
+			got = append(got, curr)
+		}
+		rows.Close()
+
+		if !reflect.DeepEqual(otc.want, got) {
+			t.Errorf("expected: %v, got: %v", otc.want, got)
+		}
 	}
+
+	// drop table
+	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
 }
 
-
-
+/*
 // special tests that don't work well in table format
 func TestQueryContextOverflowTypes(t *testing.T){
 
@@ -382,7 +426,7 @@ func TestQueryContextOverflowTypes(t *testing.T){
 		t.Error(err)
 	}
 
-	ExecuteDMLClientLib([]string{`INSERT INTO TypeTestb (stringt,bytest ,intt, floatt, boolt) 
+	ExecuteDMLClientLib([]string{`INSERT INTO TypeTestb (stringt,bytest ,intt, floatt, boolt)
 		VALUES ("aa", CAST("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV" as bytes),9223372036854775807,
 		 3, TRUE)`})
 
@@ -395,19 +439,25 @@ func TestQueryContextOverflowTypes(t *testing.T){
 	}
 	defer db.Close()
 
-	// read 
-	var strine string 
+	// read
+	var strine string
 	var tinybytes []byte
 	var tinyint int8
-	var tinyfloat float32 
+	var tinyfloat float32
 	var bl bool
 
-	rows := mustQueryContext(t, ctx, db, "SELECT * FROM TypeTestb")
+	rows, err := db.QueryContext(ctx, tc.input)
+	if err != tc.wantError {
+		t.Errorf("Unexpected error, got %#v want %#v", err, tc.wantError)
+	}
+	defer rows.Close()
+
+
 	for rows.Next() {
 		if err := rows.Scan(
 			&strine, &tinybytes, &tinyint, &tinyfloat, &bl); err != nil {
 			fmt.Println(reflect.TypeOf(err))
-			fmt.Printf("ERROR NOT NIL\n\n\n\n")	
+			fmt.Printf("ERROR NOT NIL\n\n\n\n")
 			t.Error(err)
 		}
 	}
@@ -425,9 +475,10 @@ func TestQueryContextOverflowTypes(t *testing.T){
 
 }
 
+*/
 
 /*
-// using query context, from doc 
+// using query context, from doc
 func TestHeck(t *testing.T){
 
 	// run DDL on the driver
@@ -459,7 +510,6 @@ func TestHeck(t *testing.T){
 	}
 
 	log.Print("Created tables.")
-}	
+}
 
 */
-
