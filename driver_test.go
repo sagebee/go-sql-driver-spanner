@@ -23,6 +23,7 @@ import (
 	"os"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"testing"
 
 	// API/lib packages not imported by driver.
@@ -106,6 +107,18 @@ func init() {
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
+// Used to check if error contains expected string 
+// If want is the empty string, no error is expected
+func ErrorContainsStr(err error, want string) bool {
+	if want == "" && err != nil{
+		return false
+	}
+	if err == nil{
+		return want == ""
+	}
+	return strings.Contains(err.Error(), want)
+}
+
 // Executes DDL statements.
 func executeDdlApi(curs *Connector, ddls []string) (err error) {
 
@@ -183,7 +196,8 @@ func TestQueryContext(t *testing.T) {
 	tests := []struct {
 		input     string
 		want      []testQueryContextRow
-		wantError error
+		wantErrorQuery	string
+		wantErrorScan	string
 	}{
 		// empty query
 		{input: "", want: []testQueryContextRow{}},
@@ -232,16 +246,17 @@ func TestQueryContext(t *testing.T) {
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if err != tc.wantError {
-			t.Fatalf(err.Error()) //  ~ err doesn't get set qhen qury fails
+		if ! ErrorContainsStr(err, tc.wantErrorQuery){
+			t.Errorf("Unexpected error %v", err)
 		}
 		defer rows.Close()
 
 		got := []testQueryContextRow{}
 		for rows.Next() {
 			curr := testQueryContextRow{}
-			if err := rows.Scan(&curr.A, &curr.B, &curr.C); err != nil {
-				t.Error(err)
+			err := rows.Scan(&curr.A, &curr.B, &curr.C)
+			if ! ErrorContainsStr(err, tc.wantErrorScan){
+				t.Errorf("Unexpected error %v", err)
 			}
 			got = append(got, curr)
 		}
