@@ -107,13 +107,13 @@ func init() {
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
-// Used to check if error contains expected string 
+// Used to check if error contains expected string
 // If want is the empty string, no error is expected
 func ErrorContainsStr(err error, want string) bool {
-	if want == "" && err != nil{
+	if want == "" && err != nil {
 		return false
 	}
-	if err == nil{
+	if err == nil {
 		return want == ""
 	}
 	return strings.Contains(err.Error(), want)
@@ -190,14 +190,14 @@ func TestQueryContext(t *testing.T) {
 	}
 
 	type testQueryContextRow struct {
-		A,B,C string
+		A, B, C string
 	}
 
 	tests := []struct {
-		input     string
-		want      []testQueryContextRow
-		wantErrorQuery	string
-		wantErrorScan	string
+		input          string
+		want           []testQueryContextRow
+		wantErrorQuery string
+		wantErrorScan  string
 	}{
 		// empty query
 		{input: "", want: []testQueryContextRow{}},
@@ -246,7 +246,7 @@ func TestQueryContext(t *testing.T) {
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if ! ErrorContainsStr(err, tc.wantErrorQuery){
+		if !ErrorContainsStr(err, tc.wantErrorQuery) {
 			t.Errorf("Unexpected error %v", err)
 		}
 		defer rows.Close()
@@ -255,7 +255,7 @@ func TestQueryContext(t *testing.T) {
 		for rows.Next() {
 			curr := testQueryContextRow{}
 			err := rows.Scan(&curr.A, &curr.B, &curr.C)
-			if ! ErrorContainsStr(err, tc.wantErrorScan){
+			if !ErrorContainsStr(err, tc.wantErrorScan) {
 				t.Errorf("Unexpected error %v", err)
 			}
 			got = append(got, curr)
