@@ -374,9 +374,9 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 			}},
 		// Read special float value negative infinity.
 		{input: "SELECT * FROM TestQueryType WHERE stringt = \"ninf\" ",
-		want: []testQueryTypetRow{
-			{stringt: "ninf", bytest: []byte("ninf"), intt: 64, floatt: math.Inf(-1), boolt: true},
-		}},
+			want: []testQueryTypetRow{
+				{stringt: "ninf", bytest: []byte("ninf"), intt: 64, floatt: math.Inf(-1), boolt: true},
+			}},
 
 		// float special values
 		/*{input: "SELECT * FROM TestQueryType WHERE stringt = \"nan\" ORDER BY stringt",
@@ -560,44 +560,6 @@ func TestIntOverflow(t *testing.T) {
 	defer curs.Close()
 	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
 }
-
-/*
-func TestQueryContextBadRead(t *testing.T) {
-
-	type TestQueryOverflowRow struct {
-		stringt string
-		bytest  []byte
-		intt    int8
-		floatt  float32
-		boolt   bool
-	}
-
-	// Read overflow cases.
-	overflowTests := []struct {
-		input          string
-		want           []TestQueryOverflowRow
-		wantErrorQuery string
-		wantErrorScan  string
-	}{
-		// Read too large bytes
-
-			{input: "SELECT * FROM TestQueryType WHERE stringt = \"byteoverflow\"",
-				wantErrorScan: "unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8",
-				want: []TestQueryOverflowRow{
-					{stringt: "byteoverflow", intt: 0, floatt: 0, boolt: false},
-				}},
-
-		// Read too large int
-		{input: "SELECT * FROM TestQueryType WHERE stringt = \"maxint\"",
-			wantErrorScan: "FFFFFFFFFF",
-			want: []TestQueryOverflowRow{
-				{stringt: "maxint", intt: 0, floatt: 0, boolt: false},
-			}
-		},
-	}
-}
-
-*/
 
 /*
 // special tests that don't work well in table format
