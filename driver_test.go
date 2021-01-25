@@ -47,14 +47,16 @@ type Connector struct {
 func NewConnector() (*Connector, error) {
 
 	// Configure emulator if set.
-	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
+	spannerHost, emulator := os.LookupEnv("SPANNER_EMULATOR_HOST")
+
+	// configure production if credentials set
 
 	ctx := context.Background()
 
 	var adminClient *adminapi.DatabaseAdminClient
 	var err error
 
-	if ok {
+	if emulator {
 		adminClient, err = adminapi.NewDatabaseAdminClient(
 			ctx,
 			option.WithoutAuthentication(),

@@ -24,7 +24,12 @@ export SPANNER_EMULATOR_HOST=0.0.0.0:9010
 
 ## Cloud 
 
-*TODO*
+Set credentials 
+```
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/file.json
+```
+
+Set Project
 
 <br>
 
