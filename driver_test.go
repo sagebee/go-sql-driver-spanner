@@ -18,11 +18,8 @@ import (
 	"cloud.google.com/go/spanner"
 	"context"
 	"database/sql"
-	"fmt"
-	"log"
 	"os"
 	"reflect"
-	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -45,14 +42,33 @@ type Connector struct {
 
 func NewConnector() (*Connector, error) {
 
-	// Configure emulator if set.
-	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
-
 	ctx := context.Background()
+
+	adminClient, err := CreateAdminClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dataClient, err := spanner.NewClient(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	curs := &Connector{
+		ctx:         ctx,
+		client:      dataClient,
+		adminClient: adminClient,
+	}
+	return curs, nil
+}
+
+func CreateAdminClient(ctx context.Context) (*adminapi.DatabaseAdminClient, error) {
 
 	var adminClient *adminapi.DatabaseAdminClient
 	var err error
 
+	// Configure emulator if set.
+	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
 	if ok {
 		adminClient, err = adminapi.NewDatabaseAdminClient(
 			ctx,
@@ -69,17 +85,7 @@ func NewConnector() (*Connector, error) {
 		}
 	}
 
-	dataClient, err := spanner.NewClient(ctx, dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	curs := &Connector{
-		ctx:         ctx,
-		client:      dataClient,
-		adminClient: adminClient,
-	}
-	return curs, nil
+	return adminClient, nil
 }
 
 func (c *Connector) Close() {
@@ -119,8 +125,16 @@ func ErrorContainsStr(err error, want string) bool {
 	return strings.Contains(err.Error(), want)
 }
 
+func ErrorExpected(err error, want bool) bool {
+
+	if err != nil {
+		return want
+	}
+	return !want
+}
+
 // Executes DDL statements.
-func executeDdlApi(curs *Connector, ddls []string) (err error) {
+func executeDdlApi(curs *Connector, ddls []string) error {
 
 	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
 		Database:   dsn,
@@ -136,7 +150,7 @@ func executeDdlApi(curs *Connector, ddls []string) (err error) {
 }
 
 // Executes DML using the client library.
-func ExecuteDMLClientLib(dml []string) (err error) {
+func ExecuteDMLClientLib(dml []string) error {
 
 	// Open client/
 	ctx := context.Background()
@@ -154,12 +168,10 @@ func ExecuteDMLClientLib(dml []string) (err error) {
 
 	// Execute statements.
 	_, err = client.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
-		stmts := stmts
-		rowCounts, err := txn.BatchUpdate(ctx, stmts)
+		_, err := txn.BatchUpdate(ctx, stmts)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Executed %d SQL statements using Batch DML.\n", len(rowCounts))
 		return nil
 	})
 
@@ -171,7 +183,7 @@ func TestQueryContext(t *testing.T) {
 	// Set up test table.
 	curs, err := NewConnector()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	defer curs.Close()
 
@@ -181,88 +193,96 @@ func TestQueryContext(t *testing.T) {
 		C   STRING(1024)
 	)	 PRIMARY KEY (A)`})
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	err = ExecuteDMLClientLib([]string{`INSERT INTO TestQueryContext (A, B, C) 
 		VALUES ("a1", "b1", "c1"), ("a2", "b2", "c2") , ("a3", "b3", "c3") `})
 	if err != nil {
-		t.Error(err)
-	}
-
-	type testQueryContextRow struct {
-		A, B, C string
-	}
-
-	tests := []struct {
-		input          string
-		want           []testQueryContextRow
-		wantErrorQuery string
-		wantErrorScan  string
-	}{
-		// empty query
-		{input: "", want: []testQueryContextRow{}},
-		// syntax error
-		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
-		// retur nothing
-		{input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
-		// return one tuple
-		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
-			want: []testQueryContextRow{
-				{A: "a1", B: "b1", C: "c1"},
-			}},
-		// return subset of tuples
-		{input: "SELECT * FROM TestQueryContext WHERE A = \"a1\" OR A = \"a2\"",
-			want: []testQueryContextRow{
-				{A: "a1", B: "b1", C: "c1"},
-				{A: "a2", B: "b2", C: "c2"},
-			}},
-		// subet of tuples with !=
-		{input: "SELECT * FROM TestQueryContext WHERE A != \"a3\"",
-			want: []testQueryContextRow{
-				{A: "a1", B: "b1", C: "c1"},
-				{A: "a2", B: "b2", C: "c2"},
-			}},
-		// return entire table
-		{input: "SELECT * FROM TestQueryContext ORDER BY A",
-			want: []testQueryContextRow{
-				{A: "a1", B: "b1", C: "c1"},
-				{A: "a2", B: "b2", C: "c2"},
-				{A: "a3", B: "b3", C: "c3"},
-			}},
-		// query non existant table
-		{input: "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
+		t.Fatal(err)
 	}
 
 	// Open db.
 	ctx := context.Background()
 	db, err := sql.Open("spanner", dsn)
 	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
+
+	type testQueryContextRow struct {
+		A, B, C string
+	}
+
+	tests := []struct {
+		name           string
+		input          string
+		want           []testQueryContextRow
+		wantErrorQuery bool
+		wantErrorScan  bool
+	}{
+		{name: "empty query",
+			input: "", want: []testQueryContextRow{}},
+		{name: "suntax error",
+			input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
+		{name: "return nothing",
+			input: "SELECT * FROM TestQueryContext WHERE A = \"hihihi\"", want: []testQueryContextRow{}},
+		{name: "select one tuple",
+			input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+			}},
+		{name: "select subset of tuples",
+			input: "SELECT * FROM TestQueryContext WHERE A = \"a1\" OR A = \"a2\"",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+			}},
+		{name: "select subset of tuples with !=",
+			input: "SELECT * FROM TestQueryContext WHERE A != \"a3\"",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+			}},
+		{name: "select entire table",
+			input:         "SELECT * FROM TestQueryContext ORDER BY A",
+			want: []testQueryContextRow{
+				{A: "a1", B: "b1", C: "c1"},
+				{A: "a2", B: "b2", C: "c2"},
+				{A: "a3", B: "b3", C: "c3"},
+			}},
+		{name: "query non existant table",
+			input: "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
+	}
 
 	// Run tests
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if !ErrorContainsStr(err, tc.wantErrorQuery) {
-			t.Errorf("Unexpected error %v", err)
+		if !ErrorExpected(err, tc.wantErrorQuery) {
+			if tc.wantErrorQuery {
+				t.Errorf("%s: expected query error but error was %v", tc.name, err)
+			} else {
+				t.Errorf("%s: unexpected query error: %v", tc.name, err)
+			}
 		}
-		defer rows.Close()
 
 		got := []testQueryContextRow{}
 		for rows.Next() {
-			curr := testQueryContextRow{}
+			var curr testQueryContextRow
 			err := rows.Scan(&curr.A, &curr.B, &curr.C)
-			if !ErrorContainsStr(err, tc.wantErrorScan) {
-				t.Errorf("Unexpected error %v", err)
+			if !ErrorExpected(err, tc.wantErrorScan) {
+				if tc.wantErrorScan {
+					t.Errorf("%s: expected query error but error was %v", tc.name, err)
+				} else {
+					t.Errorf("%s: unexpected query error: %v", tc.name, err)
+				}
 			}
 			got = append(got, curr)
 		}
+		rows.Close()
 
 		if !reflect.DeepEqual(tc.want, got) {
-			t.Errorf("expected: %v, got: %v", tc.want, got)
+			t.Errorf("Test failed: %s. expected: %v, got: %v", tc.name, tc.want, got)
 		}
 	}
 
