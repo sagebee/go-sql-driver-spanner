@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -87,16 +88,6 @@ func (c *Connector) Close() {
 	c.adminClient.Close()
 }
 
-func ErrorContains(err error, want string) bool {
-	if want == "" && err != nil{
-		return false
-	}
-	if err == nil{
-		return want == ""
-	}
-	return strings.Contains(err.Error(), want)
-}
-
 func init() {
 
 	var projectId, instanceId, databaseId string
@@ -115,6 +106,18 @@ func init() {
 
 	// Derive data source name.
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
+}
+
+// Used to check if error contains expected string
+// If want is the empty string, no error is expected
+func ErrorContainsStr(err error, want string) bool {
+	if want == "" && err != nil {
+		return false
+	}
+	if err == nil {
+		return want == ""
+	}
+	return strings.Contains(err.Error(), want)
 }
 
 // Executes DDL statements.
@@ -192,9 +195,10 @@ func TestQueryContext(t *testing.T) {
 	}
 
 	tests := []struct {
-		input     string
-		want      []testQueryContextRow
-		wantError error
+		input          string
+		want           []testQueryContextRow
+		wantErrorQuery string
+		wantErrorScan  string
 	}{
 		// empty query
 		{input: "", want: []testQueryContextRow{}},
@@ -243,8 +247,8 @@ func TestQueryContext(t *testing.T) {
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if err != tc.wantError {
-			t.Errorf("Unexpected error, got %#v want %#v", err, tc.wantError) //  ~ err doesn't get set qhen qury fails
+		if !ErrorContainsStr(err, tc.wantErrorQuery) {
+			t.Errorf("Unexpected error %v", err)
 		}
 		defer rows.Close()
 
@@ -269,7 +273,7 @@ func TestQueryContext(t *testing.T) {
 	}
 }
 
-func TestQueryContextAtomicTypes(t *testing.T) {
+func CreateAtomicTypeTable() {
 
 	// set up test table
 	curs, err := NewConnector()
@@ -288,10 +292,29 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 
 	ExecuteDMLClientLib([]string{`INSERT INTO TestQueryType (stringt,bytest ,intt, floatt, boolt) 
 		VALUES ("aa", CAST("aa" as bytes), 42, 42, TRUE), ("bb", CAST("bb" as bytes),-42, -42, FALSE),
-		("x", CAST("x" as bytes), 64, CAST("nan" AS FLOAT64), TRUE), 
-		("xx", CAST("xx" as bytes), 64, CAST("inf" AS FLOAT64), TRUE),
-		("xxx", CAST("xxx" as bytes), 64, CAST("-inf" AS FLOAT64), TRUE),
-		("byteoverflow", CAST("abcdefghijklmnop" as bytes), 42, 42, TRUE)`})
+		("nan", CAST("nan" as bytes), 64, CAST("nan" AS FLOAT64), TRUE), 
+		("pinf", CAST("pinf" as bytes), 64, CAST("inf" AS FLOAT64), TRUE),
+		("ninf", CAST("ninf" as bytes), 64, CAST("-inf" AS FLOAT64), TRUE),
+		("byteoverflow", CAST("abcdefghijklmnop" as bytes), 42, 42, TRUE),
+		("maxint", CAST("maxint" as bytes), 9223372036854775807, 42, TRUE),
+		("minint", CAST("minint" as bytes), -9223372036854775808, 42, TRUE),
+		("nullbytes", null, 42, 42, TRUE),
+		("nullint", CAST("nullint" as bytes), null, 42, TRUE),
+		("nullfloat", CAST("nullfloat" as bytes), 42, null, TRUE),
+		("nullbool", CAST("nullbool" as bytes), 42, 42, null)`})
+}
+
+func TestQueryContextAtomicTypes(t *testing.T) {
+
+	CreateAtomicTypeTable()
+
+	// Open db.
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
 	type testQueryTypetRow struct {
 		stringt string
@@ -301,108 +324,280 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 		boolt   bool
 	}
 
-	type TestQueryOverflowRow struct {
-		stringt string
-		bytest  [2]byte
-		intt    int8
-		floatt  float32
-		boolt   bool
-	}
-
 	tests := []struct {
-		input     string
-		want      []testQueryTypetRow
-		wantError error
+		input          string
+		want           []testQueryTypetRow
+		wantErrorQuery string
+		wantErrorScan  string
 	}{
-		// Read general values, negitive & positive insts
+
+		// Read general values, negitive & positive insts.
 		{input: "SELECT * FROM TestQueryType WHERE stringt = \"aa\" OR stringt = 'bb' ORDER BY stringt",
 			want: []testQueryTypetRow{
 				{stringt: "aa", bytest: []byte("aa"), intt: 42, floatt: 42, boolt: true},
 				{stringt: "bb", bytest: []byte("bb"), intt: -42, floatt: -42, boolt: false},
 			}},
-		// float special values
-		/*{input: "SELECT * FROM TestQueryType WHERE stringt = \"x\" ORDER BY stringt",
+		// Read Max int.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"maxint\" ",
+			want: []testQueryTypetRow{
+				{stringt: "maxint", bytest: []byte("maxint"), intt: 9223372036854775807, floatt: 42, boolt: true},
+			}},
+		// Read Min int.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"minint\" ",
+			want: []testQueryTypetRow{
+				{stringt: "minint", bytest: []byte("minint"), intt: -9223372036854775808, floatt: 42, boolt: true},
+			}},
+		// Read null bytes.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"nullbytes\" ",
+			want: []testQueryTypetRow{
+				{stringt: "nullbytes", bytest: nil, intt: 42, floatt: 42, boolt: true},
+			}},
+		// Read null int.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"nullint\" ",
+			want: []testQueryTypetRow{
+				{stringt: "nullint", bytest: []byte("nullint"), intt: 0, floatt: 42, boolt: true},
+			}},
+		// Read null float.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"nullfloat\" ",
+			want: []testQueryTypetRow{
+				{stringt: "nullfloat", bytest: []byte("nullfloat"), intt: 42, floatt: 0, boolt: true},
+			}},
+		// Read null bool.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"nullbool\" ",
+			want: []testQueryTypetRow{
+				{stringt: "nullbool", bytest: []byte("nullbool"), intt: 42, floatt: 42, boolt: false},
+			}},
+		// Read special float value infinity.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"pinf\" ",
+			want: []testQueryTypetRow{
+				{stringt: "pinf", bytest: []byte("pinf"), intt: 64, floatt: math.Inf(1), boolt: true},
+			}},
+		// Read special float value negative infinity.
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"ninf\" ",
 		want: []testQueryTypetRow{
-			{stringt: "x", bytest: []byte("x"), intt: 64, floatt: math.NaN(), boolt: true},
+			{stringt: "ninf", bytest: []byte("ninf"), intt: 64, floatt: math.Inf(-1), boolt: true},
+		}},
+
+		// float special values
+		/*{input: "SELECT * FROM TestQueryType WHERE stringt = \"nan\" ORDER BY stringt",
+		want: []testQueryTypetRow{
+			{stringt: "nan", bytest: []byte("nan"), intt: 64, floatt: math.NaN(), boolt: true},
 		}},*/ // unexpected behavior
 	}
-
-	overflowTests := []struct {
-		input     string
-		want      []TestQueryOverflowRow
-		wantError string
-	}{
-		// Read too large bytes
-		{input: "SELECT * FROM TestQueryType WHERE stringt = \"byteoverflow\"",
-			wantError: "unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8",
-			want: []TestQueryOverflowRow{
-				{stringt: "byteoverflow", intt: 0, floatt: 0, boolt: false},
-			}},
-	}
-
-	// Open db.
-	ctx := context.Background()
-	db, err := sql.Open("spanner", dsn)
-	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
-	}
-	defer db.Close()
 
 	// Run tests.
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if err != tc.wantError {
-			t.Errorf("Unexpected error, got %#v want %#v", err, tc.wantError)
+		if !ErrorContainsStr(err, tc.wantErrorQuery) {
+			t.Errorf("Unexpected error %v", err)
 		}
 		defer rows.Close()
 
 		got := []testQueryTypetRow{}
 		for rows.Next() {
-			curr := testQueryTypetRow{stringt: "", bytest: nil, intt: -1, floatt: -1, boolt: false}
-			if err := rows.Scan(
-				&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt); err != nil {
-				t.Error(err)
+			curr := testQueryTypetRow{}
+			err := rows.Scan(&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt)
+			if !ErrorContainsStr(err, tc.wantErrorScan) {
+				t.Errorf("Unexpected error %v", err)
 			}
 			got = append(got, curr)
 		}
-		rows.Close()
 
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("expected: %v, got: %v", tc.want, got)
 		}
 	}
 
-	// Run overflow tests
-	for _, otc := range overflowTests {
-
-		rows, err := db.QueryContext(ctx, otc.input)
-		if err != nil {
-			t.Error(err)
-		}
-		defer rows.Close()
-
-		got := []TestQueryOverflowRow{}
-		for rows.Next() {
-			curr := TestQueryOverflowRow{}
-			err := rows.Scan(
-				&curr.stringt, &curr.bytest, &curr.intt, &curr.floatt, &curr.boolt)
-			if ! ErrorContains(err,otc.wantError){
-				t.Errorf("Unexpected error %v", err)
-			}
-			got = append(got, curr)
-		}
-		rows.Close()
-
-		if !reflect.DeepEqual(otc.want, got) {
-			t.Errorf("expected: %v, got: %v", otc.want, got)
-		}
+	// Drop table.
+	curs, err := NewConnector()
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	// drop table
+	defer curs.Close()
 	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
 }
+
+// Tests that don't work well with table style.
+func TestByteOverflow(t *testing.T) {
+
+	CreateAtomicTypeTable()
+
+	// Open db.
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	type testQueryTypetRow struct {
+		stringt string
+		bytest  [2]byte // Small byte buffer
+		intt    int
+		floatt  float64
+		boolt   bool
+	}
+
+	type byteOverflowTest struct {
+		input, wantErrorQuery, wantErrorScan string
+		want                                 testQueryTypetRow
+	}
+	bt := byteOverflowTest{
+		input:          "SELECT * FROM TestQueryType WHERE stringt = \"byteoverflow\" ",
+		wantErrorQuery: "",
+		wantErrorScan:  "storing driver.Value type []uint8 into type *[2]uint8",
+		want:           testQueryTypetRow{stringt: "byteoverflow"},
+	}
+
+	rows, err := db.QueryContext(ctx, bt.input)
+	if !ErrorContainsStr(err, bt.wantErrorQuery) {
+		t.Errorf("Unexpected error %v", err)
+	}
+	defer rows.Close()
+
+	got := testQueryTypetRow{}
+	rows.Next()
+	err = rows.Scan(&got.stringt, &got.bytest, &got.intt, &got.floatt, &got.boolt)
+	if !ErrorContainsStr(err, bt.wantErrorScan) {
+		t.Errorf("Unexpected error %v", err)
+	}
+
+	if !reflect.DeepEqual(got, bt.want) {
+		t.Errorf("expected: %v, got: %v", bt.want, got)
+	}
+
+	// Drop table.
+	curs, err := NewConnector()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer curs.Close()
+	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
+
+}
+
+func TestIntOverflow(t *testing.T) {
+
+	CreateAtomicTypeTable()
+
+	// Open db.
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	type testQueryTypetRow struct {
+		stringt string
+		bytest  []byte
+		intt    int8 // Too small int
+		floatt  float64
+		boolt   bool
+	}
+
+	// Read spanner max INT64 into golang int8
+	type intOverflowTest struct {
+		input, wantErrorQuery, wantErrorScan string
+		want                                 testQueryTypetRow
+	}
+
+	bi := intOverflowTest{
+		input:          "SELECT * FROM TestQueryType WHERE stringt = \"maxint\" ",
+		wantErrorQuery: "",
+		wantErrorScan:  "converting driver.Value type int64 (\"9223372036854775807\") to a int8: value out of range",
+		want:           testQueryTypetRow{stringt: "maxint", bytest: []byte("maxint")},
+	}
+
+	rows, err := db.QueryContext(ctx, bi.input)
+	if !ErrorContainsStr(err, bi.wantErrorQuery) {
+		t.Errorf("Unexpected error %v", err)
+	}
+	defer rows.Close()
+
+	got := testQueryTypetRow{}
+	rows.Next()
+	err = rows.Scan(&got.stringt, &got.bytest, &got.intt, &got.floatt, &got.boolt)
+	if !ErrorContainsStr(err, bi.wantErrorScan) {
+		t.Errorf("Unexpected error %v", err)
+	}
+
+	if !reflect.DeepEqual(got, bi.want) {
+		t.Errorf("expected: %v, got: %v", bi.want, got)
+	}
+
+	// Read spanner INT64 into go int8 that should fit ok
+	bi = intOverflowTest{
+		input:          "SELECT * FROM TestQueryType WHERE stringt = \"aa\" ",
+		wantErrorQuery: "",
+		wantErrorScan:  "",
+		want:           testQueryTypetRow{stringt: "aa", bytest: []byte("aa"), intt: 42, floatt: 42, boolt: true},
+	}
+
+	rows, err = db.QueryContext(ctx, bi.input)
+	if !ErrorContainsStr(err, bi.wantErrorQuery) {
+		t.Errorf("Unexpected error %v", err)
+	}
+	defer rows.Close()
+
+	got = testQueryTypetRow{}
+	rows.Next()
+	err = rows.Scan(&got.stringt, &got.bytest, &got.intt, &got.floatt, &got.boolt)
+	if !ErrorContainsStr(err, bi.wantErrorScan) {
+		t.Errorf("Unexpected error %v", err)
+	}
+
+	if !reflect.DeepEqual(got, bi.want) {
+		t.Errorf("expected: %v, got: %v", bi.want, got)
+	}
+
+	// Drop table.
+	curs, err := NewConnector()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer curs.Close()
+	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
+}
+
+/*
+func TestQueryContextBadRead(t *testing.T) {
+
+	type TestQueryOverflowRow struct {
+		stringt string
+		bytest  []byte
+		intt    int8
+		floatt  float32
+		boolt   bool
+	}
+
+	// Read overflow cases.
+	overflowTests := []struct {
+		input          string
+		want           []TestQueryOverflowRow
+		wantErrorQuery string
+		wantErrorScan  string
+	}{
+		// Read too large bytes
+
+			{input: "SELECT * FROM TestQueryType WHERE stringt = \"byteoverflow\"",
+				wantErrorScan: "unsupported Scan, storing driver.Value type []uint8 into type *[2]uint8",
+				want: []TestQueryOverflowRow{
+					{stringt: "byteoverflow", intt: 0, floatt: 0, boolt: false},
+				}},
+
+		// Read too large int
+		{input: "SELECT * FROM TestQueryType WHERE stringt = \"maxint\"",
+			wantErrorScan: "FFFFFFFFFF",
+			want: []TestQueryOverflowRow{
+				{stringt: "maxint", intt: 0, floatt: 0, boolt: false},
+			}
+		},
+	}
+}
+
+*/
 
 /*
 // special tests that don't work well in table format
@@ -490,6 +685,7 @@ func TestHeck(t *testing.T){
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	defer dbb.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
