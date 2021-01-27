@@ -563,6 +563,63 @@ func TestIntOverflow(t *testing.T) {
 	executeDdlApi(curs, []string{`DROP TABLE TestQueryType`})
 }
 
+
+
+// Null read inspectigation 
+
+func TestNullIntRead(t *testing.T) {
+
+	CreateAtomicTypeTable()
+
+	// Open db.
+	ctx := context.Background()
+	db, err := sql.Open("spanner", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	type testQueryTypetRow struct {
+		stringt string
+		bytest  []byte
+		intt    *int
+		floatt  float64
+		boolt   bool
+	}
+
+		// Read spanner max INT64 into golang int8
+	type intOverflowTest struct {
+		input, wantErrorQuery, wantErrorScan string
+		want                                 testQueryTypetRow
+	}
+
+	bi := intOverflowTest{
+		input:          "SELECT * FROM TestQueryType WHERE stringt = \"nullfloat\" ",
+		wantErrorQuery: "",
+		wantErrorScan:  "",
+		want:	testQueryTypetRow{stringt: "aa", bytest: []byte("aa"), intt: 4, floatt: 4, boolt: true},
+	}
+
+	rows, err := db.QueryContext(ctx, bi.input)
+	if !ErrorContainsStr(err, bi.wantErrorQuery) {
+		t.Errorf("Unexpected error %v", err)
+	}
+	defer rows.Close()
+
+	got := testQueryTypetRow{}
+	rows.Next()
+	err = rows.Scan(&got.stringt, &got.bytest, &got.intt, &got.floatt, &got.boolt)
+	if !ErrorContainsStr(err, bi.wantErrorScan) {
+		t.Errorf("Unexpected error %v", err)
+	}
+
+	if !reflect.DeepEqual(got, bi.want) {
+		t.Errorf("expected: %v, got: %v  \nINT: %d", bi.want, got, got.intt)
+	}
+
+}
+
+
 /*
 // special tests that don't work well in table format
 func TestQueryContextOverflowTypes(t *testing.T){
