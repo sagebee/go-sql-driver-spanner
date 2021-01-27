@@ -51,6 +51,28 @@ func main() {
 
 		// null bytes
 
+		type  atomicRow struct {
+			stringt string
+			bytest  []byte // Small byte buffer
+			intt    int
+			floatt  float64
+			boolt   bool
+		}
+
+		curr := atomicRow{}
+
+		rows, err := db.QueryContext(ctx, "SELECT * FROM SpecialFloat")
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+	
+		for rows.Next() {
+			if err := rows.Scan(&curr.id, &curr.notnum, &curr.pinf, &curr.ninf); err != nil {
+				log.Fatal(err.Error())
+			}
+		}
+		rows.Close()
+
 
 
 
