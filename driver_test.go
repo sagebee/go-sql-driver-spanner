@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 
 	// API/lib packages not imported by driver.
@@ -54,12 +53,12 @@ func NewConnector() (*Connector, error) {
 		return nil, err
 	}
 
-	curs := &Connector{
+	conn := &Connector{
 		ctx:         ctx,
 		client:      dataClient,
 		adminClient: adminClient,
 	}
-	return curs, nil
+	return conn, nil
 }
 
 func CreateAdminClient(ctx context.Context) (*adminapi.DatabaseAdminClient, error) {
@@ -68,8 +67,7 @@ func CreateAdminClient(ctx context.Context) (*adminapi.DatabaseAdminClient, erro
 	var err error
 
 	// Configure emulator if set.
-	spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST")
-	if ok {
+	if spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST"); ok {
 		adminClient, err = adminapi.NewDatabaseAdminClient(
 			ctx,
 			option.WithoutAuthentication(),
@@ -113,37 +111,17 @@ func init() {
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
-// Used to check if error contains expected string
-// If want is the empty string, no error is expected
-func ErrorContainsStr(err error, want string) bool {
-	if want == "" && err != nil {
-		return false
-	}
-	if err == nil {
-		return want == ""
-	}
-	return strings.Contains(err.Error(), want)
-}
-
-func ErrorExpected(err error, want bool) bool {
-
-	if err != nil {
-		return want
-	}
-	return !want
-}
-
 // Executes DDL statements.
-func executeDdlApi(curs *Connector, ddls []string) error {
+func executeDdlApi(conn *Connector, ddls []string) error {
 
-	op, err := curs.adminClient.UpdateDatabaseDdl(curs.ctx, &adminpb.UpdateDatabaseDdlRequest{
+	op, err := conn.adminClient.UpdateDatabaseDdl(conn.ctx, &adminpb.UpdateDatabaseDdlRequest{
 		Database:   dsn,
 		Statements: ddls,
 	})
 	if err != nil {
 		return err
 	}
-	if err := op.Wait(curs.ctx); err != nil {
+	if err := op.Wait(conn.ctx); err != nil {
 		return err
 	}
 	return nil
@@ -181,13 +159,13 @@ func ExecuteDMLClientLib(dml []string) error {
 func TestQueryContext(t *testing.T) {
 
 	// Set up test table.
-	curs, err := NewConnector()
+	conn, err := NewConnector()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer curs.Close()
+	defer conn.Close()
 
-	err = executeDdlApi(curs, []string{`CREATE TABLE TestQueryContext (
+	err = executeDdlApi(conn, []string{`CREATE TABLE TestQueryContext (
 		A   STRING(1024),
 		B  STRING(1024),
 		C   STRING(1024)
@@ -219,6 +197,7 @@ func TestQueryContext(t *testing.T) {
 		want           []testQueryContextRow
 		wantErrorQuery bool
 		wantErrorScan  bool
+		wantErrorClose bool
 	}{
 		{name: "empty query",
 			input: "", want: []testQueryContextRow{}},
@@ -244,7 +223,7 @@ func TestQueryContext(t *testing.T) {
 				{A: "a2", B: "b2", C: "c2"},
 			}},
 		{name: "select entire table",
-			input:         "SELECT * FROM TestQueryContext ORDER BY A",
+			input: "SELECT * FROM TestQueryContext ORDER BY A",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
@@ -258,36 +237,41 @@ func TestQueryContext(t *testing.T) {
 	for _, tc := range tests {
 
 		rows, err := db.QueryContext(ctx, tc.input)
-		if !ErrorExpected(err, tc.wantErrorQuery) {
-			if tc.wantErrorQuery {
-				t.Errorf("%s: expected query error but error was %v", tc.name, err)
-			} else {
-				t.Errorf("%s: unexpected query error: %v", tc.name, err)
-			}
+		if (err != nil) && (!tc.wantErrorQuery) {
+			t.Errorf("%s: unexpected query error: %v", tc.name, err)
+		}
+		if (err == nil) && (tc.wantErrorQuery) {
+			t.Errorf("%s: expected query error but error was %v", tc.name, err)
 		}
 
 		got := []testQueryContextRow{}
 		for rows.Next() {
 			var curr testQueryContextRow
 			err := rows.Scan(&curr.A, &curr.B, &curr.C)
-			if !ErrorExpected(err, tc.wantErrorScan) {
-				if tc.wantErrorScan {
-					t.Errorf("%s: expected query error but error was %v", tc.name, err)
-				} else {
-					t.Errorf("%s: unexpected query error: %v", tc.name, err)
-				}
+			if (err != nil) && (!tc.wantErrorScan) {
+				t.Errorf("%s: unexpected query error: %v", tc.name, err)
 			}
+			if (err == nil) && (tc.wantErrorScan) {
+				t.Errorf("%s: expected query error but error was %v", tc.name, err)
+			}
+
 			got = append(got, curr)
 		}
-		rows.Close()
+		rerr := rows.Close()
+		if (rerr != nil) && (!tc.wantErrorScan) {
+			t.Errorf("%s: unexpected query error: %v", tc.name, rerr)
+		}
+		if (rerr == nil) && (tc.wantErrorScan) {
+			t.Errorf("%s: expected query error but error was %v", tc.name, rerr)
+		}
 
 		if !reflect.DeepEqual(tc.want, got) {
-			t.Errorf("Test failed: %s. expected: %v, got: %v", tc.name, tc.want, got)
+			t.Errorf("Test failed: %s. want: %v, got: %v", tc.name, tc.want, got)
 		}
 	}
 
 	// Drop table.
-	err = executeDdlApi(curs, []string{`DROP TABLE TestQueryContext`})
+	err = executeDdlApi(conn, []string{`DROP TABLE TestQueryContext`})
 	if err != nil {
 		t.Error(err)
 	}
