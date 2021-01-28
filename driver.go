@@ -19,12 +19,18 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"os"
 	"regexp"
 	"time"
+
 
 	"cloud.google.com/go/spanner"
 	"github.com/rakyll/go-sql-driver-spanner/internal"
 	"google.golang.org/api/option"
+
+	adminapi "cloud.google.com/go/spanner/admin/database/apiv1"
+	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
+	"google.golang.org/grpc"
 )
 
 const userAgent = "go-sql-driver-spanner/0.1"
@@ -79,17 +85,50 @@ func openDriverConn(ctx context.Context, d *Driver, name string) (driver.Conn, e
 	if err != nil {
 		return nil, err
 	}
-	return &conn{client: client}, nil
+
+	// xxx create admin client
+	adminClient, err := CreateAdminClient(ctx)
+	return &conn{client: client, adminClient: adminClient, name: name}, nil
+}
+
+// xxx create admin client 
+func CreateAdminClient(ctx context.Context) (*adminapi.DatabaseAdminClient, error) {
+
+	var adminClient *adminapi.DatabaseAdminClient
+	var err error
+
+	// Configure emulator if set.
+	if spannerHost, ok := os.LookupEnv("SPANNER_EMULATOR_HOST"); ok {
+		adminClient, err = adminapi.NewDatabaseAdminClient(
+			ctx,
+			option.WithoutAuthentication(),
+			option.WithEndpoint(spannerHost),
+			option.WithGRPCDialOption(grpc.WithInsecure()))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		adminClient, err = adminapi.NewDatabaseAdminClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return adminClient, nil
+
 }
 
 func (c *connector) Driver() driver.Driver {
 	return &Driver{}
 }
 
+// is dsn in here ok? xxx
 type conn struct {
 	client *spanner.Client
+	adminClient *adminapi.DatabaseAdminClient
 	roTx   *spanner.ReadOnlyTransaction
 	rwTx   *rwTx
+	name	string // maybe 
 }
 
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
@@ -107,14 +146,29 @@ func (c *conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 
+
+	// Use admin API if DDL statement is provided. xxx
+	// problem: how to get name in without it being cursed
 	ddl, err := IsDdlStatement(query)
 	if err != nil {
 		return nil, err
 	}
 
 	if ddl {
-		return nil, errors.New("BEANES")
+		op, err := c.adminClient.UpdateDatabaseDdl(ctx, &adminpb.UpdateDatabaseDdlRequest{
+			Database:   c.name, // BAD
+			Statements: []string{query},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := op.Wait(ctx); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
+	// end my bad code
+
 
 	if c.roTx != nil {
 		return nil, errors.New("cannot write in read-only transaction")
@@ -123,6 +177,8 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if err != nil {
 		return nil, err
 	}
+
+
 
 	var rowsAffected int64
 	if c.rwTx == nil {
@@ -145,6 +201,7 @@ func IsDdlStatement(query string) (bool, error) {
 
 	return matchddl, nil
 }
+
 
 func (c *conn) Close() error {
 	c.client.Close()
