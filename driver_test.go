@@ -203,36 +203,42 @@ func TestQueryContext(t *testing.T) {
 			name:           "empty query",
 			wantErrorClose: true,
 			input:          "",
-			want:           []testQueryContextRow{}},
+			want:           []testQueryContextRow{},
+		},
 		{
 			name:           "syntax error",
 			wantErrorClose: true,
 			input:          "SELECT SELECT * FROM TestQueryContext",
-			want:           []testQueryContextRow{}},
+			want:           []testQueryContextRow{},
+		},
 		{
 			name:  "return nothing",
 			input: "SELECT * FROM TestQueryContext WHERE A = \"hihihi\"",
-			want:  []testQueryContextRow{}},
+			want:  []testQueryContextRow{},
+		},
 		{
 			name:  "select one tuple",
 			input: "SELECT * FROM TestQueryContext WHERE A = \"a1\"",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
-			}},
+			},
+		},
 		{
 			name:  "select subset of tuples",
 			input: "SELECT * FROM TestQueryContext WHERE A = \"a1\" OR A = \"a2\"",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
-			}},
+			},
+		},
 		{
 			name:  "select subset of tuples with !=",
 			input: "SELECT * FROM TestQueryContext WHERE A != \"a3\"",
 			want: []testQueryContextRow{
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
-			}},
+			},
+		},
 		{
 			name:  "select entire table",
 			input: "SELECT * FROM TestQueryContext ORDER BY A",
@@ -240,11 +246,13 @@ func TestQueryContext(t *testing.T) {
 				{A: "a1", B: "b1", C: "c1"},
 				{A: "a2", B: "b2", C: "c2"},
 				{A: "a3", B: "b3", C: "c3"},
-			}},
+			},
+		},
 		{
 			name:           "query non existant table",
 			wantErrorClose: true,
-			input:          "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
+			input:          "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{},
+		},
 	}
 
 	// Run tests
