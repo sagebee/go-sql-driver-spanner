@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"regexp"
 	"time"
 
 	"cloud.google.com/go/spanner"
@@ -105,6 +106,16 @@ func (c *conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 }
 
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+
+	ddl, err := IsDdlStatement(query)
+	if err != nil {
+		return nil, err
+	}
+
+	if ddl {
+		return nil, errors.New("BEANES")
+	}
+
 	if c.roTx != nil {
 		return nil, errors.New("cannot write in read-only transaction")
 	}
@@ -123,6 +134,16 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Name
 		return nil, err
 	}
 	return &result{rowsAffected: rowsAffected}, nil
+}
+
+func IsDdlStatement(query string) (bool, error) {
+
+	matchddl, err := regexp.MatchString(`(?is)^\n*\s*(CREATE|DROP|ALTER)\s+.+$`, query)
+	if err != nil {
+		return false, err
+	}
+
+	return matchddl, nil
 }
 
 func (c *conn) Close() error {
