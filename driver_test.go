@@ -200,9 +200,11 @@ func TestQueryContext(t *testing.T) {
 		wantErrorClose bool
 	}{
 		{name: "empty query",
-			input: "", want: []testQueryContextRow{}},
-		{name: "suntax error",
-			input: "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
+			wantErrorClose: true,
+			input:          "", want: []testQueryContextRow{}},
+		{name: "syntax error",
+			wantErrorClose: true,
+			input:          "SELECT SELECT * FROM TestQueryContext", want: []testQueryContextRow{}},
 		{name: "return nothing",
 			input: "SELECT * FROM TestQueryContext WHERE A = \"hihihi\"", want: []testQueryContextRow{}},
 		{name: "select one tuple",
@@ -230,7 +232,8 @@ func TestQueryContext(t *testing.T) {
 				{A: "a3", B: "b3", C: "c3"},
 			}},
 		{name: "query non existant table",
-			input: "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
+			wantErrorClose: true,
+			input:          "SELECT * FROM TestQueryContexta", want: []testQueryContextRow{}},
 	}
 
 	// Run tests
@@ -257,17 +260,19 @@ func TestQueryContext(t *testing.T) {
 
 			got = append(got, curr)
 		}
-		rerr := rows.Close()
-		if (rerr != nil) && (!tc.wantErrorScan) {
-			t.Errorf("%s: unexpected query error: %v", tc.name, rerr)
-		}
-		if (rerr == nil) && (tc.wantErrorScan) {
-			t.Errorf("%s: expected query error but error was %v", tc.name, rerr)
-		}
 
+		rows.Close()
+		err = rows.Err()
+		if (err != nil) && (!tc.wantErrorClose) {
+			t.Errorf("%s: unexpected query error: %v", tc.name, err)
+		}
+		if (err == nil) && (tc.wantErrorClose) {
+			t.Errorf("%s: expected query error but error was %v", tc.name, err)
+		}
 		if !reflect.DeepEqual(tc.want, got) {
 			t.Errorf("Test failed: %s. want: %v, got: %v", tc.name, tc.want, got)
 		}
+
 	}
 
 	// Drop table.
