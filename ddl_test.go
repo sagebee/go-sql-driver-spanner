@@ -47,7 +47,7 @@ func TestDdl(t *testing.T) {
 	// Execute DDL.
 	ctx := context.Background()
 	_, err = db.ExecContext(ctx,
-		`CREATE TABLE Singers (
+		`create table Singers (
 				SingerId   INT64 NOT NULL,
 				FirstName  STRING(1024),
 				LastName   STRING(1024),
@@ -57,5 +57,15 @@ func TestDdl(t *testing.T) {
 	if err != nil{
 		t.Error(err)
 	}
+
+	/*
+	_, err = db.ExecContext(ctx,
+		`DROP TABLE Singers`,
+	)
+	if err != nil{
+		t.Error(err)
+	}
+	*/
+
 
 }

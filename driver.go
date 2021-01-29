@@ -23,7 +23,6 @@ import (
 	"regexp"
 	"time"
 
-
 	"cloud.google.com/go/spanner"
 	"github.com/rakyll/go-sql-driver-spanner/internal"
 	"google.golang.org/api/option"
@@ -86,12 +85,10 @@ func openDriverConn(ctx context.Context, d *Driver, name string) (driver.Conn, e
 		return nil, err
 	}
 
-	// xxx create admin client
 	adminClient, err := CreateAdminClient(ctx)
 	return &conn{client: client, adminClient: adminClient, name: name}, nil
 }
 
-// xxx create admin client 
 func CreateAdminClient(ctx context.Context) (*adminapi.DatabaseAdminClient, error) {
 
 	var adminClient *adminapi.DatabaseAdminClient
@@ -122,13 +119,12 @@ func (c *connector) Driver() driver.Driver {
 	return &Driver{}
 }
 
-// is dsn in here ok? xxx
 type conn struct {
-	client *spanner.Client
+	client      *spanner.Client
 	adminClient *adminapi.DatabaseAdminClient
-	roTx   *spanner.ReadOnlyTransaction
-	rwTx   *rwTx
-	name	string // maybe 
+	roTx        *spanner.ReadOnlyTransaction
+	rwTx        *rwTx
+	name        string 
 }
 
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
@@ -146,17 +142,15 @@ func (c *conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 
-
-	// Use admin API if DDL statement is provided. xxx
-	// problem: how to get name in without it being cursed
+	// Use admin API if DDL statement is provided.
 	ddl, err := IsDdlStatement(query)
 	if err != nil {
 		return nil, err
 	}
-
+	
 	if ddl {
 		op, err := c.adminClient.UpdateDatabaseDdl(ctx, &adminpb.UpdateDatabaseDdlRequest{
-			Database:   c.name, // BAD
+			Database:   c.name, 
 			Statements: []string{query},
 		})
 		if err != nil {
@@ -165,10 +159,8 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Name
 		if err := op.Wait(ctx); err != nil {
 			return nil, err
 		}
-		return nil, nil
+		return &result{rowsAffected: 0}, nil
 	}
-	// end my bad code
-
 
 	if c.roTx != nil {
 		return nil, errors.New("cannot write in read-only transaction")
@@ -177,8 +169,6 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if err != nil {
 		return nil, err
 	}
-
-
 
 	var rowsAffected int64
 	if c.rwTx == nil {
@@ -201,7 +191,6 @@ func IsDdlStatement(query string) (bool, error) {
 
 	return matchddl, nil
 }
-
 
 func (c *conn) Close() error {
 	c.client.Close()
