@@ -108,6 +108,8 @@ func init() {
 
 	// Derive data source name.
 	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
+
+	//log.Fatal(dsn)
 }
 
 // Used to check if error contains expected string
@@ -306,7 +308,7 @@ func CreateAtomicTypeTable() {
 		("nullbool", CAST("nullbool" as bytes), 42, 42, null)`})
 }
 
-func TestQueryContextAtomicTypes(t *testing.T) {
+func xTestQueryContextAtomicTypes(t *testing.T) {
 
 	CreateAtomicTypeTable()
 
@@ -421,7 +423,7 @@ func TestQueryContextAtomicTypes(t *testing.T) {
 }
 
 // Tests that don't work well with table style.
-func TestByteOverflow(t *testing.T) {
+func xTestByteOverflow(t *testing.T) {
 
 	CreateAtomicTypeTable()
 
@@ -479,7 +481,7 @@ func TestByteOverflow(t *testing.T) {
 
 }
 
-func TestIntOverflow(t *testing.T) {
+func xTestIntOverflow(t *testing.T) {
 
 	CreateAtomicTypeTable()
 
@@ -567,6 +569,7 @@ func TestIntOverflow(t *testing.T) {
 
 // Null read inspectigation 
 
+/*
 func TestNullIntRead(t *testing.T) {
 
 	CreateAtomicTypeTable()
@@ -582,7 +585,7 @@ func TestNullIntRead(t *testing.T) {
 	type testQueryTypetRow struct {
 		stringt string
 		bytest  []byte
-		intt    *int
+		intt    int
 		floatt  float64
 		boolt   bool
 	}
@@ -618,6 +621,8 @@ func TestNullIntRead(t *testing.T) {
 	}
 
 }
+
+*/
 
 
 /*
@@ -693,40 +698,4 @@ func TestQueryContextOverflowTypes(t *testing.T){
 
 */
 
-/*
-// using query context, from doc
-func TestHeck(t *testing.T){
 
-	// run DDL on the driver
-
-	dbb, err := sql.Open(
-		"spanner",
-		"projects/test-project/instances/test-instance/databases/gotest",
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer dbb.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
-
-	_, err = dbb.ExecContext(
-		ctx,
-		`CREATE TABLE Singers (
-				SingerId   INT64 NOT NULL,
-				FirstName  STRING(1024),
-				LastName   STRING(1024),
-				SingerInfo BYTES(MAX)
-			) PRIMARY KEY (SingerId)`,
-	)
-	if err != nil{
-		debug.PrintStack()
-		t.Error(err)
-	}
-
-	log.Print("Created tables.")
-}
-
-*/
