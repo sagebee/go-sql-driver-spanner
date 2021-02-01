@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	dsn string
+	dsnn string
 )
 
 func init() {
@@ -32,13 +32,13 @@ func init() {
 	}
 
 	// Derive data source name.
-	dsn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
+	dsnn = "projects/" + projectId + "/instances/" + instanceId + "/databases/" + databaseId
 }
 
 func TestDdl(t *testing.T) {
 
 	// Open db.
-	db, err := sql.Open("spanner", dsn)
+	db, err := sql.Open("spanner", dsnn)
 	if err != nil {
 		t.Fatal(err)
 	}
