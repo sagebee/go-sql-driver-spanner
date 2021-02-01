@@ -50,7 +50,6 @@ func NewConnector() (*Connector, error) {
 	spannerHost, emulator := os.LookupEnv("SPANNER_EMULATOR_HOST")
 
 	// configure production if credentials set
-
 	ctx := context.Background()
 
 	var adminClient *adminapi.DatabaseAdminClient
@@ -308,7 +307,7 @@ func CreateAtomicTypeTable() {
 		("nullbool", CAST("nullbool" as bytes), 42, 42, null)`})
 }
 
-func xTestQueryContextAtomicTypes(t *testing.T) {
+func TestQueryContextAtomicTypes(t *testing.T) {
 
 	CreateAtomicTypeTable()
 
